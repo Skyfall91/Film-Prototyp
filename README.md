@@ -223,7 +223,7 @@ SwiftUI, iOS 26, Xcode 26 oder neuer. Signiert wird mit dem Personal Team, daher
 
 | Bereich | Was passiert |
 |---|---|
-| Konto | Registrieren / Anmelden (geprüft gegen das Konto auf dem Gerät, Passwort nur als Hash), Abmelden, Konto löschen (DSGVO) |
+| Konto | Registrieren / Anmelden gegen eine kleine Konten-Datenbank auf dem Gerät (SwiftData, Passwort nur als Hash). Mehrere Konten, jedes mit eigenen Profilen; nach dem Abmelden kommt man per Login genau zu diesem Stand zurück. Abmelden, Konto löschen (DSGVO) |
 | Abo | Tarife Solo / Duo / Familie (Profile, gleichzeitige Geräte, Zusammen-Modus; 4K in allen). Abo-Wahl nach dem Geschmacksprofil, 7 Tage gratis, Demo-Kauf ohne Zahlungsdaten, Tarif wechseln/kündigen. Ohne Abo: Trailer und Vorschläge ja, Abspielen nein |
 | Wer schaut? | Startbildschirm bei mehreren Profilen, mehrere antippen = Zusammen-Modus |
 | Profil erstellen | Avatar-Galerie nach Genres, Name, Kinderprofil mit FSK-Stufe |
@@ -242,6 +242,7 @@ SwiftUI, iOS 26, Xcode 26 oder neuer. Signiert wird mit dem Personal Team, daher
 ### Architektur (für die Modellierung)
 
 - `Model/`: `Film`, `Profile`, `Interaction`, `AppStore` (Zustand + JSON-Persistenz)
+- `Model/AccountDatabase`: Konten-Datenbank (SwiftData), je Konto Anmeldedaten und gespeicherter Stand
 - `Model/Account`: Konto, Tarif (`Plan`), `Subscription`, `PurchaseService` (StoreKit 2 mit Demo-Kauf als Rückfall) → später **Strategy**/**Adapter** für Zahlungsanbieter
 - `Engine/RecommendationEngine`: Hybrid: Matrix-Faktorisierung aus MovieLens (Filmbonus + 24 Geschmacksfaktoren) + IMDb + inhaltsbasiertes Modell (Genre, Stimmung, Regie, Cast)
 - `Engine/MoodSearch`: austauschbare KI-Komponente (Apple Intelligence ↔ Stichwort-Fallback) → später **Strategy**

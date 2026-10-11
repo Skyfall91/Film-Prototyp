@@ -15,6 +15,11 @@ struct ForYouView: View {
     /// Nachlernen plötzlich ausgetauscht.
     @State private var queue: [Recommendation] = []
     @State private var swiped: [Recommendation] = []
+    /// Geschmack hat sich geändert, während „Für dich“ nicht zu sehen war: beim Zurückkommen neu sortieren.
+    @State private var visible = false
+    @State private var stale = false
+    /// Die Änderung kam von hier (Swipe, Rückgängig): Die oberste Karte bleibt liegen.
+    @State private var ownChange = false
 
     struct Toast: Equatable {
         var text: String
@@ -75,7 +80,12 @@ struct ForYouView: View {
                 addingProfile = false
             }
         }
-        .onAppear { if queue.isEmpty { rebuildQueue() } }
+        .onAppear {
+            visible = true
+            if queue.isEmpty || stale { stale = false; rebuildQueue(animated: !queue.isEmpty) }
+        }
+        .onDisappear { visible = false }
+        .onChange(of: store.tasteRevision) { _, _ in tasteChanged() }
         .onChange(of: store.activeProfileIDs) { _, _ in rebuildQueue(animated: true) }
         .onChange(of: store.runtimeFilter) { _, _ in rebuildQueue(animated: true) }
         .onChange(of: store.kindFilter) { _, _ in rebuildQueue(animated: true) }
@@ -118,6 +128,7 @@ struct ForYouView: View {
             Spacer()
 
             Button {
+                ownChange = true
                 withAnimation(.snappy) { store.undo() }
                 if let last = swiped.popLast() {
                     withAnimation(.smooth(duration: 0.35)) {
@@ -200,6 +211,22 @@ struct ForYouView: View {
         .glassEffect(.regular.tint(store.accent).interactive(), in: .capsule)
     }
 
+    /// Jede Änderung am Geschmack (Swipe, Chat, Kalibrieren, Bewertung) wirkt sofort.
+    /// Eigene Swipes lassen die oberste Karte liegen und sortieren nur dahinter neu,
+    /// alles andere (z. B. der KI-Chat) baut den Stapel ganz neu auf.
+    private func tasteChanged() {
+        guard visible else { stale = true; return }
+        if ownChange, let top = queue.first {
+            ownChange = false
+            let fresh = store.recommendations(limit: 6).filter { $0.id != top.id }
+            PosterCache.warmUp(fresh.prefix(3).map(\.film.id))
+            withAnimation(.smooth(duration: 0.4)) { queue = [top] + fresh.prefix(3) }
+        } else {
+            ownChange = false
+            rebuildQueue(animated: true)
+        }
+    }
+
     private func rebuildQueue(animated: Bool = false) {
         let fresh = store.recommendations(limit: 4)
         PosterCache.warmUp(fresh.map(\.film.id))
@@ -233,6 +260,7 @@ struct ForYouView: View {
     }
 
     private func handle(_ direction: SwipeDirection, _ film: Film) {
+        ownChange = direction != .up
         let rec = direction == .up ? nil : queue.first(where: { $0.film.id == film.id })
         defer { if let rec { advance(past: rec) } }
         if rec != nil { store.homeSwipeCount += 1 }
@@ -302,54 +330,82 @@ struct ForYouView: View {
     }
 }
 
-/// Die große Vorschlagskarte.
+/// Die große Vorschlagskarte: Das Poster füllt die Karte, unten liegt in einem dunklen Verlauf
+/// alles, was neugierig macht: Match, großer Titel, ein Satz über den Film und warum er passt.
 struct RecommendationCard: View {
     let rec: Recommendation
     var compact = false
     var width: CGFloat? = nil
     @State private var shownMatch = 0
 
-    static let infoHeight: CGFloat = 76
+    /// Alles liegt auf dem Poster, unter der Karte braucht es keinen Platz mehr.
+    static let infoHeight: CGFloat = 0
 
-    /// Das Poster bleibt frei, sein eigener Titelschriftzug ist das Bild.
-    /// Titel, Match und Begründung sitzen ruhig in einem Streifen darunter.
     var body: some View {
-        VStack(spacing: 0) {
-            PosterView(film: rec.film, cornerRadius: 0)
-            info
-                .frame(height: Self.infoHeight)
-        }
-        .frame(width: width)
-        .background(Color(white: 0.1))
-        .clipShape(.rect(cornerRadius: 28))
-        .overlay(RoundedRectangle(cornerRadius: 28).strokeBorder(.white.opacity(0.08)))
-        .animation(.smooth(duration: 0.3), value: compact)
-        .cardShadow()
-        .task(id: rec.id) {
-            // Hinten liegende Karten zeigen den Wert gleich; nur die erste füllt sich sichtbar.
-            guard !compact else { shownMatch = rec.match; return }
-            try? await Task.sleep(for: .milliseconds(150))
-            withAnimation(.smooth(duration: 0.9)) { shownMatch = rec.match }
-        }
+        PosterView(film: rec.film, cornerRadius: 0)
+            .overlay(alignment: .bottom) { cover }
+            .frame(width: width)
+            .background(Color(white: 0.1))
+            .clipShape(.rect(cornerRadius: 28))
+            .overlay(RoundedRectangle(cornerRadius: 28).strokeBorder(.white.opacity(0.08)))
+            .animation(.smooth(duration: 0.3), value: compact)
+            .cardShadow()
+            .task(id: rec.id) {
+                // Hinten liegende Karten zeigen den Wert gleich; nur die erste zählt sichtbar hoch.
+                guard !compact else { shownMatch = rec.match; return }
+                try? await Task.sleep(for: .milliseconds(150))
+                withAnimation(.smooth(duration: 0.9)) { shownMatch = rec.match }
+            }
     }
 
-    private var info: some View {
-        HStack(alignment: .center, spacing: 14) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(rec.film.title)
-                    .font(.system(.title3, design: .rounded).weight(.bold))
-                    .lineLimit(1).minimumScaleFactor(0.75)
-                Text(rec.reason)
-                    .font(.footnote).foregroundStyle(.secondary).lineLimit(1)
+    private var cover: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                if rec.film.comingSoon {
+                    Label(rec.film.releaseNote ?? "Demnächst", systemImage: "calendar")
+                        .font(.subheadline.weight(.heavy))
+                } else {
+                    Text("\(shownMatch) % Match")
+                        .font(.subheadline.weight(.heavy))
+                        .monospacedDigit()
+                        .contentTransition(.numericText(value: Double(shownMatch)))
+                        .foregroundStyle(Color.match(rec.match))
+                }
+                Text(rec.film.isSeries ? "\(rec.film.yearText) · \(rec.film.seasonsText)" : "\(String(rec.film.year)) · \(rec.film.runtimeText)")
+                    .font(.subheadline).foregroundStyle(.white.opacity(0.7))
             }
-            Spacer(minLength: 0)
-            if rec.film.comingSoon {
-                Image(systemName: "calendar").font(.title3).foregroundStyle(.secondary)
-            } else {
-                MatchRing(match: shownMatch, target: rec.match)
+            .lineLimit(1)
+
+            Text(rec.film.title)
+                .font(.system(size: 36, weight: .heavy, design: .rounded))
+                .lineLimit(2).minimumScaleFactor(0.6)
+                .shadow(color: .black.opacity(0.5), radius: 8, y: 2)
+
+            Text(rec.film.hook)
+                .font(.callout)
+                .foregroundStyle(.white.opacity(0.88))
+                .lineLimit(compact ? 2 : 3)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if !rec.reason.isEmpty {
+                Label(rec.reason, systemImage: "sparkles")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tint)
+                    .lineLimit(1)
+                    .padding(.top, 2)
             }
         }
-        .padding(.horizontal, 18)
+        .foregroundStyle(.white)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 20).padding(.bottom, 20).padding(.top, 90)
+        .background {
+            // Verlauf statt Kasten: Das Poster bleibt sichtbar, der Text trotzdem lesbar.
+            LinearGradient(stops: [.init(color: .black.opacity(0), location: 0),
+                                   .init(color: .black.opacity(0.75), location: 0.3),
+                                   .init(color: .black.opacity(0.88), location: 0.55),
+                                   .init(color: .black.opacity(0.95), location: 1)],
+                           startPoint: .top, endPoint: .bottom)
+        }
     }
 }
 

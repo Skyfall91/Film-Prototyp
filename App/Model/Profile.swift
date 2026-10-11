@@ -118,7 +118,8 @@ struct Profile: Codable, Identifiable, Hashable, Sendable {
         refit()
     }
 
-    var color: Color { Profile.palette[colorIndex % Profile.palette.count] }
+    /// Farbe der Figur im Profilbild, sonst eine aus der Grundpalette.
+    var color: Color { avatarArt?.color ?? Profile.palette[colorIndex % Profile.palette.count] }
     var avatarArt: AvatarArt? { avatar.flatMap(AvatarArt.byID) }
     var initial: String { String(name.prefix(1)).uppercased() }
     var isKid: Bool { maxFSK <= 12 }

@@ -19,6 +19,7 @@
 		50B44B855D89BCD2C8B991BA /* TasteChat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 086224977C10C38A172C2161 /* TasteChat.swift */; };
 		53D5B1C653109DD4E1586417 /* RecommendationEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C708CE0461AC51B3B993B65 /* RecommendationEngine.swift */; };
 		9A5752F79AC907A15939C848 /* LibraryImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 750BA9623B0543813A979AED /* LibraryImport.swift */; };
+		9D9D537CBBDCA454290057AF /* AccountDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E0D4441BD9DC3BBCCD828EF /* AccountDatabase.swift */; };
 		9EA6C230558F6C5134FE5F00 /* YouTubeKit in Frameworks */ = {isa = PBXBuildFile; productRef = 5699DBF3C8755FE44605163E /* YouTubeKit */; };
 		A1D4FD76E55447D730ADAEC3 /* Account.swift in Sources */ = {isa = PBXBuildFile; fileRef = 532519A0E02F81CB1280E44B /* Account.swift */; };
 		A527FFF7D1B29ECD09713DC6 /* FilmScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A1715E259FA339652DA1EE4 /* FilmScreens.swift */; };
@@ -34,7 +35,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		0324EFF41DA353F59D0379B8 /* FilmPrototyp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FilmPrototyp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		0324EFF41DA353F59D0379B8 /* FilmPrototyp.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = FilmPrototyp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		054E014D7FDE85A6C2A7A87D /* ProfileScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileScreens.swift; sourceTree = "<group>"; };
 		086224977C10C38A172C2161 /* TasteChat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasteChat.swift; sourceTree = "<group>"; };
 		10C8467BFFFAC4DBCA1A7C39 /* AppStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStore.swift; sourceTree = "<group>"; };
@@ -46,6 +47,7 @@
 		4A0ED024E9ECD1CD028157C8 /* Onboarding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Onboarding.swift; sourceTree = "<group>"; };
 		532519A0E02F81CB1280E44B /* Account.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Account.swift; sourceTree = "<group>"; };
 		54412609FA16B6EDD7D82F71 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = AppIcon.icon; sourceTree = "<group>"; };
+		5E0D4441BD9DC3BBCCD828EF /* AccountDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountDatabase.swift; sourceTree = "<group>"; };
 		6C708CE0461AC51B3B993B65 /* RecommendationEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecommendationEngine.swift; sourceTree = "<group>"; };
 		6F8E776D4B05CF5F78B1696A /* ExternalFilms.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExternalFilms.swift; sourceTree = "<group>"; };
 		750BA9623B0543813A979AED /* LibraryImport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryImport.swift; sourceTree = "<group>"; };
@@ -142,6 +144,7 @@
 			isa = PBXGroup;
 			children = (
 				532519A0E02F81CB1280E44B /* Account.swift */,
+				5E0D4441BD9DC3BBCCD828EF /* AccountDatabase.swift */,
 				10C8467BFFFAC4DBCA1A7C39 /* AppStore.swift */,
 				996D61BE7659D9E817D5EB9C /* Film.swift */,
 				EF2ACF95E76957F4C1982890 /* Profile.swift */,
@@ -227,6 +230,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A1D4FD76E55447D730ADAEC3 /* Account.swift in Sources */,
+				9D9D537CBBDCA454290057AF /* AccountDatabase.swift in Sources */,
 				271FC4228544D6D5CCB9E384 /* AccountScreens.swift in Sources */,
 				C56098D6742BE7C42AD76042 /* AppStore.swift in Sources */,
 				258F0D15CEAB2B80355A71AA /* BrowseScreens.swift in Sources */,
@@ -262,7 +266,7 @@
 				DEVELOPMENT_LANGUAGE = de;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Film;
-				INFOPLIST_KEY_NSFaceIDUsageDescription = "Mit Face ID bestätigst du den Demo-Kauf – wie bei Apple Pay.";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Mit Face ID bestätigst du den Demo-Kauf, wie bei Apple Pay.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -413,7 +417,7 @@
 				DEVELOPMENT_LANGUAGE = de;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Film;
-				INFOPLIST_KEY_NSFaceIDUsageDescription = "Mit Face ID bestätigst du den Demo-Kauf – wie bei Apple Pay.";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Mit Face ID bestätigst du den Demo-Kauf, wie bei Apple Pay.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";

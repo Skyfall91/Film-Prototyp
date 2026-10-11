@@ -31,7 +31,7 @@ struct AuthFlow: View {
             }
         }
         .preferredColorScheme(.dark)
-        .onAppear { if store.account != nil && step == .welcome { step = .login } }
+        .onAppear { if (store.account != nil || !store.savedAccounts.isEmpty) && step == .welcome { step = .login } }
     }
 
     private func go(_ next: Step) { withAnimation(.smooth(duration: 0.45)) { step = next } }
@@ -186,7 +186,7 @@ private struct RegisterForm: View {
                 .frame(maxWidth: .infinity)
                 .tint(.secondary)
 
-            Text("Prototyp: Das Konto wird nur auf diesem Gerät gespeichert, das Passwort nur als Hash.")
+            Text("Prototyp: Konten liegen in einer kleinen Datenbank auf diesem Gerät, das Passwort nur als Hash.")
                 .font(.caption2).foregroundStyle(.tertiary)
                 .frame(maxWidth: .infinity)
                 .multilineTextAlignment(.center)
@@ -202,9 +202,31 @@ private struct LoginForm: View {
     @State private var password = ""
     @State private var error: String?
     @State private var forgot = false
+    @State private var saved: [String] = []
 
     var body: some View {
         AuthCard(title: "Anmelden", subtitle: "Willkommen zurück.", back: back) {
+            if !saved.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Konten auf diesem Gerät").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(saved, id: \.self) { mail in
+                                Button { withAnimation(.snappy) { email = mail } } label: {
+                                    Label(mail, systemImage: email == mail ? "checkmark.circle.fill" : "person.crop.circle")
+                                        .font(.subheadline.weight(.medium))
+                                        .lineLimit(1)
+                                        .padding(.horizontal, 14).padding(.vertical, 10)
+                                }
+                                .buttonStyle(.plain)
+                                .glassEffect(email == mail ? .regular.tint(.white.opacity(0.25)).interactive() : .regular.interactive(),
+                                             in: .capsule)
+                            }
+                        }
+                    }
+                    .scrollClipDisabled()
+                }
+            }
             VStack(spacing: 0) {
                 FieldRow(symbol: "envelope", placeholder: "E-Mail", text: $email, content: .emailAddress)
                 Divider().padding(.leading, 52)
@@ -237,7 +259,10 @@ private struct LoginForm: View {
             .font(.subheadline.weight(.semibold))
             .tint(.secondary)
         }
-        .onAppear { if email.isEmpty { email = store.account?.email ?? "" } }
+        .onAppear {
+            saved = store.savedAccounts
+            if email.isEmpty { email = store.account?.email ?? saved.first ?? "" }
+        }
         .onChange(of: email) { error = nil }
         .onChange(of: password) { error = nil }
         .alert("Passwort vergessen?", isPresented: $forgot) {

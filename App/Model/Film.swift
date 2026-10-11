@@ -57,6 +57,15 @@ struct Film: Codable, Identifiable, Hashable, Sendable {
         + cast.prefix(2).map { ("c:\($0)", 0.4) }
     }
 
+    /// Ein Satz, der neugierig macht: der erste Satz der handgeschriebenen, spoilerfreien Beschreibung.
+    var hook: String {
+        let s = synopsis.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let end = s.firstRange(of: /[.!?](\s|$)/) else { return s }
+        let first = String(s[..<end.lowerBound]) + String(s[end.lowerBound])
+        // Sehr kurze Anfänge („Dr.“, „Teil 2.“) tragen allein nicht, dann die ganze Beschreibung.
+        return first.count < 30 ? s : first
+    }
+
     var runtimeText: String {
         let h = runtime / 60, m = runtime % 60
         return h > 0 ? (m > 0 ? "\(h) Std. \(m) Min." : "\(h) Std.") : "\(m) Min."
@@ -282,20 +291,75 @@ enum FilmIndex {
     static let allGenres: [String] = Array(Set(all.flatMap(\.genres))).sorted()
     static let allMoods: [String] = Array(Set(all.flatMap(\.moods))).sorted()
 
-    /// Kalibrierungs-Stapel: bei jedem Start neu gemischt, abwechselnd bekannte Filme
-    /// und Geheimtipps für Filmfans. Bereits bewertete Filme fallen raus.
-    static func calibrationQueue(for profile: Profile?, excluding rated: Set<String> = []) -> [Film] {
-        // Nur Filme: Das Lernen aus echten Bewertungen (MovieLens) ist für Filme geprüft.
-        let pool = all.filter { !$0.isSeries && !$0.comingSoon && (profile?.allows($0) ?? true) && !rated.contains($0.id) }
-        var popular = pool.filter { !$0.niche }.shuffled()
-        var niche = pool.filter(\.niche).shuffled()
-        var queue: [Film] = []
-        // Grob 3:2, genug Bekanntes, damit man viel bewerten kann, aber regelmäßig Geheimtipps.
-        while !popular.isEmpty || !niche.isEmpty {
-            for _ in 0..<3 where !popular.isEmpty { queue.append(popular.removeFirst()) }
-            for _ in 0..<2 where !niche.isEmpty { queue.append(niche.removeFirst()) }
+    /// Bekanntheit innerhalb der eigenen Zeit: Wie oft wurde der Film gesehen, verglichen mit
+    /// anderen bekannten Filmen aus denselben Jahren? (MovieLens-Daten reichen bis 2023, neue Filme
+    /// hätten sonst nie eine Chance gegen die Klassiker der 90er.) Wer neue Filme kennt, bekommt sie
+    /// trotzdem schnell: Der Picker lernt den Zeitraum mit.
+    static let familiarity: [String: Double] = {
+        let films = all.filter { !$0.isSeries && !$0.comingSoon }
+        var result: [String: Double] = [:]
+        for f in films {
+            // Ab 2023 enden die MovieLens-Daten, die Zahlen dort sind nicht verlässlich: neutral zählen.
+            if f.year >= 2023 { result[f.id] = f.niche ? 0.2 : 1; continue }
+            let peers = films.filter { !$0.niche && abs($0.year - f.year) <= 2 }.compactMap(\.mlSeen).sorted()
+            let median = peers.isEmpty ? 0.01 : peers[peers.count / 2]
+            result[f.id] = min((f.mlSeen ?? 0) / max(median, 0.0005), 4)
         }
-        return queue
+        return result
+    }()
+}
+
+/// Wählt beim Kennenlernen den nächsten Film so, dass man ihn möglichst schon gesehen hat:
+/// zuerst die bekanntesten Filme, und dabei lernt sie, aus welcher Zeit jemand Filme kennt.
+/// Wer z. B. alte Klassiker als „Nicht gesehen“ wischt, bekommt danach neuere Filme.
+struct CalibrationPicker {
+    /// Gesehen / nicht gesehen je Zeitraum, startet neutral (1:1).
+    private var seen: [Int: Double] = [:]
+    private var unseen: [Int: Double] = [:]
+    private var total = 0, totalSeen = 0
+    private let pool: [Film]
+
+    init(profile: Profile?, excluding rated: Set<String>) {
+        // Nur Filme: Das Lernen aus echten Bewertungen (MovieLens) ist für Filme geprüft.
+        pool = FilmIndex.all.filter { !$0.isSeries && !$0.comingSoon && (profile?.allows($0) ?? true) && !rated.contains($0.id) }
+    }
+
+    private static func era(_ year: Int) -> Int {
+        switch year {
+        case ..<1990: 0
+        case ..<2005: 1
+        case ..<2015: 2
+        case ..<2020: 3
+        default: 4
+        }
+    }
+
+    /// Chance, dass jemand einen Film aus diesem Zeitraum kennt.
+    private func chance(_ film: Film) -> Double {
+        let e = Self.era(film.year)
+        return (seen[e, default: 0] + 1) / (seen[e, default: 0] + unseen[e, default: 0] + 2)
+    }
+
+    mutating func record(_ film: Film, seen wasSeen: Bool) {
+        let e = Self.era(film.year)
+        if wasSeen { seen[e, default: 0] += 1; totalSeen += 1 } else { unseen[e, default: 0] += 1 }
+        total += 1
+    }
+
+    /// Die nächsten Filme, die am wahrscheinlichsten schon gesehen wurden (mit etwas Zufall,
+    /// damit nicht jeder dieselbe Reihe bekommt). Geheimtipps erst, wenn jemand viel kennt.
+    func next(_ count: Int, excluding shown: Set<String>) -> [Film] {
+        let seenRate = total == 0 ? 0.5 : Double(totalSeen) / Double(total)
+        let nicheWeight = total < 6 ? 0.05 : 0.1 + 0.5 * seenRate
+        var rng = SystemRandomNumberGenerator()
+        return pool.filter { !shown.contains($0.id) }
+            .map { f -> (Film, Double) in
+                let known = (FilmIndex.familiarity[f.id] ?? 0).squareRoot()
+                return (f, known * chance(f) * (f.niche ? nicheWeight : 1) * Double.random(in: 0.75...1.25, using: &rng))
+            }
+            .sorted { $0.1 > $1.1 }
+            .prefix(count)
+            .map(\.0)
     }
 }
 

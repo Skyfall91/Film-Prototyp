@@ -37,13 +37,22 @@ struct OnboardingFlow: View {
                     if upgraded { go(.name) } else { cancel?() }
                 }
             case .name:
-                ProfileEditor(isFirst: mode == .firstRun, cancel: cancel) { name, art, fsk, little in
-                    profileID = store.addProfile(name: name, colorIndex: art.colorIndex, maxFSK: fsk, littleKid: little, avatar: art.id)
+                // Nach „Zurück“ aus der Filmauswahl gibt es das Profil schon: dann bearbeiten statt neu anlegen.
+                ProfileEditor(isFirst: mode == .firstRun, editing: profile, continuing: true,
+                              cancel: profile == nil ? cancel : (cancel == nil ? nil : { confirmCancel = true })) { name, art, fsk, little in
+                    if let profileID, profile != nil {
+                        store.editProfile(profileID, name: name, avatar: art, maxFSK: fsk, littleKid: little)
+                    } else {
+                        profileID = store.addProfile(name: name, colorIndex: art.colorIndex, maxFSK: fsk, littleKid: little, avatar: art.id)
+                    }
                     // Kleine Kinder wischen nicht selbst, die Eltern suchen Lieblingsfilme aus.
                     go(little ? .favorites : .calibrate)
                 }
+                .id(profileID)
             case .calibrate:
-                if let profileID { CalibrationStep(profileID: profileID) { go(.reveal) } }
+                if let profileID {
+                    CalibrationStep(profileID: profileID, alreadyRated: ratedCount) { go(.reveal) }
+                }
             case .favorites:
                 if let profileID { KidFavoritesStep(profileID: profileID) { go(.reveal) } }
             case .reveal:
@@ -57,16 +66,25 @@ struct OnboardingFlow: View {
             }
         }
         .safeAreaInset(edge: .top, spacing: 0) {
-            // Abbrechen geht beim Anlegen weiterer Profile in jedem Schritt, // das halb fertige Profil wird dann wieder entfernt.
-            if cancel != nil, [.calibrate, .favorites].contains(step) {
+            // Zurück führt zum Profil (Name, Bild), das Profil und alle Swipes bleiben erhalten.
+            // Abbrechen gibt es nur beim Anlegen weiterer Profile, erst dann wird das Profil verworfen.
+            if [.calibrate, .favorites].contains(step) {
                 HStack {
-                    Button { confirmCancel = true } label: {
-                        Image(systemName: "xmark").font(.headline).frame(width: 44, height: 44)
+                    Button { go(.name) } label: {
+                        Image(systemName: "chevron.left").font(.headline).frame(width: 44, height: 44)
                     }
                     .buttonStyle(.plain)
                     .glassEffect(.regular.interactive(), in: .circle)
-                    .accessibilityLabel("Abbrechen")
+                    .accessibilityLabel("Zurück zum Profil")
                     Spacer()
+                    if cancel != nil {
+                        Button { confirmCancel = true } label: {
+                            Image(systemName: "xmark").font(.headline).frame(width: 44, height: 44)
+                        }
+                        .buttonStyle(.plain)
+                        .glassEffect(.regular.interactive(), in: .circle)
+                        .accessibilityLabel("Profil nicht anlegen")
+                    }
                 }
                 .padding(.horizontal, 20).padding(.top, 4)
             }
@@ -87,6 +105,10 @@ struct OnboardingFlow: View {
     private func go(_ next: Step) {
         withAnimation(.smooth(duration: 0.45)) { step = next }
     }
+
+    private var profile: Profile? { profileID.flatMap { id in store.profiles.first { $0.id == id } } }
+    /// Schon bewertete Filme zählen weiter, wenn man zurück und wieder vor geht.
+    private var ratedCount: Int { profile?.interactions.values.filter { $0 != .unseen }.count ?? 0 }
 }
 
 /// Langsam scrollende Wand aus Postern, grau, ein Poster leuchtet (wie das App-Icon).
@@ -200,11 +222,15 @@ struct CalibrationStep: View {
     let profileID: UUID
     var title = "Kennst du den?"
     var minimum = 6
+    /// Schon bewertete Filme dieses Profils (nach „Zurück“ im Onboarding).
+    var alreadyRated = 0
     var next: () -> Void
 
     @State private var queue: [Film] = []
     @State private var trigger: SwipeDirection?
     @State private var rated = 0
+    @State private var picker: CalibrationPicker?
+    @State private var shown: Set<String> = []
 
     private let target = 12
     private let options: [SwipeDirection: SwipeOption] = [
@@ -267,9 +293,12 @@ struct CalibrationStep: View {
         .ignoresSafeArea(.keyboard)
         .task {
             guard queue.isEmpty else { return }
-            let films = FilmIndex.calibrationQueue(for: profile,
-                                                  excluding: Set(profile?.interactions.keys.map { $0 } ?? []))
-            PosterCache.warmUp(films.prefix(10).map(\.id))
+            rated = alreadyRated
+            let p = CalibrationPicker(profile: profile, excluding: Set(profile?.interactions.keys.map { $0 } ?? []))
+            picker = p
+            let films = p.next(4, excluding: [])
+            shown = Set(films.map(\.id))
+            PosterCache.warmUp(films.map(\.id))
             // Karten wachsen nach dem Wechsel animiert auf volle Größe.
             try? await Task.sleep(for: .milliseconds(120))
             withAnimation(.spring(response: 0.55, dampingFraction: 0.78)) { queue = films }
@@ -300,7 +329,18 @@ struct CalibrationStep: View {
         }
         store.calibrate(profile: profileID, film: film, interaction)
         if interaction != .unseen { withAnimation(.snappy) { rated += 1 } }
-        withAnimation(.spring(response: 0.42, dampingFraction: 0.8)) { queue.removeFirst() }
+        // Aus jedem Swipe lernen, welche Filme jemand kennt, und die Karten hinter der nächsten neu wählen.
+        picker?.record(film, seen: interaction != .unseen)
+        withAnimation(.spring(response: 0.42, dampingFraction: 0.8)) {
+            queue.removeFirst()
+            if let p = picker {
+                let upcoming = Array(queue.prefix(1))
+                let more = p.next(4 - upcoming.count, excluding: shown.union(upcoming.map(\.id)))
+                shown.formUnion(more.map(\.id))
+                queue = upcoming + more
+                PosterCache.warmUp(more.map(\.id))
+            }
+        }
         if rated >= target + 6 || queue.isEmpty { next() }
     }
 }

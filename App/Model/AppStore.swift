@@ -38,10 +38,11 @@ enum SwipeAction: CaseIterable {
 }
 
 enum AuthError: LocalizedError {
-    case invalidEmail, weakPassword, noAccount, unknownEmail, wrongPassword
+    case invalidEmail, weakPassword, noAccount, unknownEmail, wrongPassword, emailTaken
 
     var errorDescription: String? {
         switch self {
+        case .emailTaken: "Zu dieser E-Mail gibt es schon ein Konto. Melde dich damit an."
         case .invalidEmail: "Das sieht nicht nach einer E-Mail-Adresse aus."
         case .weakPassword: "Das Passwort braucht mindestens 8 Zeichen und eine Zahl."
         case .noAccount: "Auf diesem Gerät gibt es noch kein Konto. Erstelle zuerst eins."
@@ -66,6 +67,8 @@ final class AppStore {
     let purchases = PurchaseService()
     var onboardingDone = false
     var pendingRatings: [PendingRating] = []
+    /// Zählt jede gespeicherte Änderung (Swipes, Chat, Kalibrierung), damit „Für dich“ sofort neu sortiert.
+    private(set) var tasteRevision = 0
     /// Bewertung, die als Sheet angezeigt werden soll (nach dem Schauen).
     var ratingToPresent: PendingRating?
     /// Zählt Swipes auf der Startseite, die Gesten-Legende verschwindet nach ein paar Swipes.
@@ -97,24 +100,33 @@ final class AppStore {
         let mail = email.trimmingCharacters(in: .whitespaces).lowercased()
         guard AuthError.looksLikeEmail(mail) else { throw AuthError.invalidEmail }
         guard password.count >= 8, password.contains(where: \.isNumber) else { throw AuthError.weakPassword }
+        guard db.record(mail) == nil else { throw AuthError.emailTaken }
+        // Ein anderes Konto war geladen: Es liegt sicher in der Datenbank, das neue fängt leer an.
+        if account != nil { clearSession() }
         let salt = UUID().uuidString
         account = Account(email: mail, passwordHash: Account.hash(password, salt: salt), salt: salt,
                           created: .now, consented: .now, subscription: nil)
         signedIn = true
-        save()
+        save(signedInNow: true)
     }
 
-    /// Prüft E-Mail und Passwort gegen das Konto auf diesem Gerät.
+    /// Prüft E-Mail und Passwort gegen die Konten-Datenbank und lädt den Stand genau dieses Kontos.
     /// Ein echter Dienst würde das auf einem Server tun, damit klappt es dann auf jedem Gerät.
     func signIn(email: String, password: String) throws {
         let mail = email.trimmingCharacters(in: .whitespaces).lowercased()
-        guard let account else { throw AuthError.noAccount }
-        guard account.email == mail else { throw AuthError.unknownEmail }
-        guard account.matches(password) else { throw AuthError.wrongPassword }
+        guard let record = db.record(mail) else { throw savedAccounts.isEmpty ? AuthError.noAccount : AuthError.unknownEmail }
+        guard Account.hash(password, salt: record.salt) == record.passwordHash else { throw AuthError.wrongPassword }
+        if account?.email != mail, let snap = try? JSONDecoder().decode(Snapshot.self, from: record.state) {
+            clearSession()
+            apply(snap)
+        }
         signedIn = true
         hasChosenViewers = profiles.count <= 1
-        save()
+        save(signedInNow: true)
     }
+
+    /// E-Mails aller Konten auf diesem Gerät, zum schnellen Zurückwechseln beim Anmelden.
+    var savedAccounts: [String] { db.emails }
 
     func signOut() {
         signedIn = false
@@ -123,11 +135,18 @@ final class AppStore {
         save()
     }
 
-    /// DSGVO: Konto samt aller Profile, Bewertungen und Importe löschen.
+    /// DSGVO: Konto samt aller Profile, Bewertungen und Importe löschen, auch aus der Datenbank.
     func deleteAccount() {
+        if let email = account?.email { db.delete(email) }
         account = nil
         signedIn = false
         resetAll()
+    }
+
+    /// Profile und Sitzung leeren (beim Wechsel zu einem anderen Konto).
+    private func clearSession() {
+        profiles = []; activeProfileIDs = []; onboardingDone = false; pendingRatings = []
+        skippedToday = []; undoStack = []; runtimeFilter = nil; kindFilter = .all; hasChosenViewers = false
     }
 
     func subscribe(_ sub: Subscription) {
@@ -389,7 +408,11 @@ final class AppStore {
         save()
     }
 
-    // MARK: - Persistenz (einfaches JSON, reicht für den Prototyp)
+    // MARK: - Persistenz
+    // Der aktuelle Stand liegt als JSON-Datei vor (schneller Start), jedes Konto zusätzlich
+    // in der Konten-Datenbank, damit man per Anmeldung zu ihm zurückkehren kann.
+
+    private let db = AccountDatabase()
 
     private struct Snapshot: Codable {
         var profiles: [Profile]
@@ -404,23 +427,32 @@ final class AppStore {
         URL.applicationSupportDirectory.appending(path: "state.json")
     }
 
-    func save() {
+    func save(signedInNow: Bool = false) {
+        tasteRevision += 1
         let snap = Snapshot(profiles: profiles, activeProfileIDs: activeProfileIDs,
                             onboardingDone: onboardingDone, pendingRatings: pendingRatings,
                             account: account, signedIn: signedIn)
+        guard let data = try? JSONEncoder().encode(snap) else { return }
         try? FileManager.default.createDirectory(at: .applicationSupportDirectory, withIntermediateDirectories: true)
-        try? JSONEncoder().encode(snap).write(to: fileURL, options: .atomic)
+        try? data.write(to: fileURL, options: .atomic)
+        if let account { db.upsert(account, state: data, signedInNow: signedInNow) }
     }
 
     private func load() {
         guard let data = try? Data(contentsOf: fileURL),
               let snap = try? JSONDecoder().decode(Snapshot.self, from: data) else { return }
+        apply(snap)
+        signedIn = snap.signedIn ?? false
+        // Älterer Stand von vor der Datenbank: Konto einmal übernehmen.
+        if let account, db.record(account.email) == nil { db.upsert(account, state: data) }
+    }
+
+    private func apply(_ snap: Snapshot) {
         profiles = snap.profiles
         activeProfileIDs = snap.activeProfileIDs
         onboardingDone = snap.onboardingDone
         pendingRatings = snap.pendingRatings
         account = snap.account
-        signedIn = snap.signedIn ?? false
         // Beim Start wählt man wie bei Netflix, wer schaut, außer es gibt nur ein Profil.
         hasChosenViewers = profiles.count <= 1
     }

@@ -1,0 +1,2 @@
+# Hilfsskripte zählen nicht als Sprache des Projekts (GitHub zeigt dann 100 % Swift).
+*.sh linguist-detectable=false
