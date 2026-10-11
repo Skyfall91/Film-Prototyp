@@ -4,13 +4,13 @@ import FoundationModels
 /// Was das Modell aus einer Chat-Nachricht über den Geschmack lernt.
 @Generable
 struct TasteUpdate {
-    @Guide(description: "Stimmungen oder Genres, die die Person MAG – nur aus der vorgegebenen Liste")
+    @Guide(description: "Stimmungen oder Genres, die die Person MAG, nur aus der vorgegebenen Liste")
     var likes: [String]
-    @Guide(description: "Stimmungen oder Genres, die die Person NICHT mag – nur aus der vorgegebenen Liste")
+    @Guide(description: "Stimmungen oder Genres, die die Person NICHT mag, nur aus der vorgegebenen Liste")
     var dislikes: [String]
     @Guide(description: "Kurze, freundliche deutsche Antwort in Du-Form (max. 2 Sätze), die bestätigt, was du gelernt hast. Keine Anrede, keine Begrüßung, keine gegenderten Personenbezeichnungen.")
     var reply: String
-    @Guide(description: "Filmtitel, die die Person ausdrücklich nennt – so wie geschrieben. Leer, wenn keiner genannt wird.")
+    @Guide(description: "Filmtitel, die die Person ausdrücklich nennt, so wie geschrieben. Leer, wenn keiner genannt wird.")
     var filmTitles: [String]
     @Guide(description: "Für jeden Filmtitel in derselben Reihenfolge: true, wenn die Person den Film mag, sonst false.")
     var filmLiked: [Bool]
@@ -142,7 +142,7 @@ struct TasteChatView: View {
         .transition(.blurReplace)
     }
 
-    /// Antworten untereinander über die volle Breite – alles lesbar, nichts abgeschnitten.
+    /// Antworten untereinander über die volle Breite, alles lesbar, nichts abgeschnitten.
     private func answerButtons(_ q: TasteQuestion) -> some View {
         VStack(spacing: 8) {
             ForEach(q.answers) { a in
@@ -215,7 +215,7 @@ struct TasteChatView: View {
 
     private var inputBar: some View {
         HStack(spacing: 10) {
-            TextField("Oder erzähl selbst – auch Namen …", text: $input, axis: .vertical)
+            TextField("Oder erzähl selbst, auch Namen …", text: $input, axis: .vertical)
                 .lineLimit(1...4)
                 .focused($focused)
                 .submitLabel(.send)
@@ -238,7 +238,7 @@ struct TasteChatView: View {
     private func start() {
         guard messages.isEmpty else { return }
         let ai = MoodSearch.isAppleIntelligenceAvailable
-        messages = [ChatMessage(fromUser: false, text: "Ein paar Fragen – dort, wo ich mir bei dir noch unsicher bin. Du kannst auch frei antworten.")]
+        messages = [ChatMessage(fromUser: false, text: "Ein paar Fragen, dort, wo ich mir bei dir noch unsicher bin. Du kannst auch frei antworten.")]
         askNext()
         if ai {
             session = LanguageModelSession(instructions: """
@@ -249,9 +249,9 @@ struct TasteChatView: View {
         }
     }
 
-    /// Nächste gezielte Frage – dort, wo das Profil am wenigsten weiß.
+    /// Nächste gezielte Frage, dort, wo das Profil am wenigsten weiß.
     /// Zuerst die vorbereiteten Fragen, danach Entweder-oder-Fragen aus Alltagssituationen.
-    /// Gestellte Fragen werden pro Profil gemerkt – nichts wird doppelt gefragt.
+    /// Gestellte Fragen werden pro Profil gemerkt, nichts wird doppelt gefragt.
     private func askNext() {
         guard let profile else { return }
         let history = TasteQuestions.asked(for: profileID)
@@ -261,7 +261,7 @@ struct TasteChatView: View {
         }
         withAnimation(.smooth) {
             openQuestion = nil
-            messages.append(ChatMessage(fromUser: false, text: "Das war's von meiner Seite. Wenn dir noch was einfällt – schreib's einfach."))
+            messages.append(ChatMessage(fromUser: false, text: "Das war's von meiner Seite. Wenn dir noch was einfällt, schreib's einfach."))
         }
     }
 
@@ -289,7 +289,7 @@ struct TasteChatView: View {
     private func answerScale(_ q: TasteQuestion, low: String, high: String) {
         guard case .scale(_, _, let weights) = q.kind else { return }
         let v = scaleValue
-        let label = abs(v) < 0.2 ? "Irgendwo dazwischen" : (v < 0 ? low : high) + (abs(v) < 0.6 ? " – eher" : "")
+        let label = abs(v) < 0.2 ? "Irgendwo dazwischen" : (v < 0 ? low : high) + (abs(v) < 0.6 ? ", eher" : "")
         scaleValue = 0
         commit(label: label, affinity: weights.mapValues { $0 * v * 1.5 })
     }
@@ -339,7 +339,7 @@ struct TasteChatView: View {
             }
             let reply = learned.isEmpty
                 ? "Dazu habe ich nichts Konkretes gefunden. Nenn mir gern Genres, Stimmungen oder Namen aus Regie und Schauspiel."
-                : (update.reply.isEmpty ? "Notiert – das fließt ab jetzt in deine Vorschläge ein." : update.reply)
+                : (update.reply.isEmpty ? "Notiert. Das fließt ab jetzt in deine Vorschläge ein." : update.reply.withoutDashes)
             withAnimation(.smooth) {
                 thinking = false
                 messages.append(ChatMessage(fromUser: false, text: reply, learned: learned))
@@ -369,7 +369,7 @@ struct TasteChatView: View {
             return FilmIndex.allGenres.contains(v) ? "g:\(v)" : "m:\(v)"
         }
         var chips: [String] = []
-        // Namen aus Regie und Schauspiel direkt aus dem Text – unabhängig von der KI.
+        // Namen aus Regie und Schauspiel direkt aus dem Text, unabhängig von der KI.
         let people = Self.peopleUpdate(lastUserText)
         // Bei offenen Fragen: genannte Filme mit dem Signal der Frage lernen.
         let films = lastFilmSignal.map { signal in TasteQuestions.films(in: lastUserText).map { ($0, signal) } } ?? []
@@ -410,7 +410,7 @@ struct TasteChatView: View {
         for (title, liked) in films.prefix(3) {
             guard let film = await WikidataLookup.find(title) else {
                 withAnimation(.smooth) {
-                    messages.append(ChatMessage(fromUser: false, text: "„\(title)“ konnte ich gerade nirgends finden – magst du mir sagen, was dir daran gefällt?"))
+                    messages.append(ChatMessage(fromUser: false, text: "„\(title)“ konnte ich gerade nirgends finden, magst du mir sagen, was dir daran gefällt?"))
                 }
                 continue
             }

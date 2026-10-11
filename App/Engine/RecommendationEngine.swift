@@ -1,9 +1,9 @@
 import Foundation
 
-/// Ein Vorschlag inkl. Begründung – „Warum dieser Film?“ ist Teil des Konzepts.
+/// Ein Vorschlag inkl. Begründung, „Warum dieser Film?“ ist Teil des Konzepts.
 struct Recommendation: Identifiable, Hashable {
     var film: Film
-    /// 0–100, wie gut der Film zur aktuellen Runde passt.
+    /// 0-100, wie gut der Film zur aktuellen Runde passt.
     var match: Int
     var reason: String
     var id: String { film.id }
@@ -23,8 +23,7 @@ enum RecommendationEngine {
         }
         let content = film.features.reduce(0) { $0 + profile.weights[$1.key, default: 0] * $1.weight }
         let hints = film.features.reduce(0) { $0 + profile.hints[$1.key, default: 0] * $1.weight }
-        // Serien werden auf IMDb im Schnitt gut eine Note besser bewertet als Filme (8,6 vs. 7,4) –
-        // ohne Ausgleich stünden sie fast immer oben.
+        // Serien werden auf IMDb im Schnitt gut eine Note besser bewertet als Filme (8,6 vs. 7,4), // ohne Ausgleich stünden sie fast immer oben.
         let quality = ((film.imdbRating ?? 7) - 7 - (film.isSeries ? 1.1 : 0)) * 0.08
         return collaborative + quality + 0.06 * content + 0.12 * hints
     }
@@ -44,9 +43,8 @@ enum RecommendationEngine {
     }
 
     static func candidates(profiles: [Profile], runtime: RuntimeFilter?, kind: KindFilter = .all, skipped: Set<String>) -> [Film] {
-        let fsk = profiles.map(\.maxFSK).min() ?? 18
         return FilmIndex.all.filter { film in
-            guard !film.comingSoon, film.fsk <= fsk, !skipped.contains(film.id), kind.allows(film) else { return false }
+            guard !film.comingSoon, profiles.allSatisfy({ $0.allows(film) }), !skipped.contains(film.id), kind.allows(film) else { return false }
             if let runtime, !runtime.allows(film.runtime) { return false }
             return !profiles.contains { $0.interactions[film.id]?.excludesFromDeck == true }
         }
@@ -76,7 +74,7 @@ enum RecommendationEngine {
             if !shared.isEmpty {
                 return "\(names) mögen \(shared.joined(separator: " & "))"
             }
-            return "Passt für \(names) – keiner geht leer aus"
+            return "Passt für \(names), keiner geht leer aus"
         }
         guard let profile = profiles.first else { return "" }
         if let similar = mostSimilarFavorite(to: film, profile: profile) {
@@ -86,7 +84,7 @@ enum RecommendationEngine {
            profile.affinity[top, default: 0] > 0.3 {
             return "Weil du \(label(top)) magst"
         }
-        return "Ein Volltreffer bei Kritikern – probier's aus"
+        return "Ein Volltreffer bei Kritikern, probier's aus"
     }
 
     static func mostSimilarFavorite(to film: Film, profile: Profile) -> Film? {
@@ -128,8 +126,8 @@ enum RecommendationEngine {
 
 // MARK: - Zeitfilter
 
-/// „Wie viel Zeit hast du?“ – höchstens oder mindestens so lang.
-/// Film, Serie oder beides – wählbar auf der Startseite.
+/// „Wie viel Zeit hast du?“, höchstens oder mindestens so lang.
+/// Film, Serie oder beides, wählbar auf der Startseite.
 enum KindFilter: String, CaseIterable, Identifiable {
     case all, films, series
     var id: String { rawValue }
@@ -176,7 +174,7 @@ struct RuntimeFilter: Equatable {
 /// Lernt aus den bewerteten Filmen, wie stark jedes Merkmal den Geschmack bestimmt.
 /// Anders als einfaches Aufsummieren werden alle Merkmale *gemeinsam* geschätzt:
 /// Liebt jemand drei düstere Nolan-Thriller, bekommt nicht jedes Merkmal den vollen
-/// Kredit, sondern das, was die Bewertungen am besten erklärt. Offline-Test: +6–7 Punkte
+/// Kredit, sondern das, was die Bewertungen am besten erklärt. Offline-Test: +6-7 Punkte
 /// Treffer gegenüber der Summen-Variante. Chat-Hinweise dienen als Vorwissen.
 enum TasteModel {
     static let lambda = 3.0
@@ -184,7 +182,7 @@ enum TasteModel {
     static let maxSamples = 200
 
     /// „Leute wie du“: persönliche Faktoren aus den eigenen Swipes schätzen (Fold-in mit
-    /// starker Regularisierung, λ = 100 – im Test an echten Personen am besten).
+    /// starker Regularisierung, λ = 100, im Test an echten Personen am besten).
     static func foldIn(samples: [Profile.Sample]) -> [Double] {
         let rows = samples.suffix(maxSamples).compactMap { s -> ([Double], Double, Double)? in
             guard let f = FilmIndex.film(s.filmID), let q = f.mlFactors else { return nil }
@@ -289,15 +287,15 @@ struct TasteSummary {
             .sorted { $0.value < $1.value }.prefix(2).map { String($0.key.dropFirst(2)) }
     }
 
-    /// Satz ohne KI – Fallback, wenn Apple Intelligence nicht verfügbar ist.
+    /// Satz ohne KI, Fallback, wenn Apple Intelligence nicht verfügbar ist.
     var sentence: String {
         guard !topMoods.isEmpty || !topGenres.isEmpty else {
-            return "Wir lernen dich gerade erst kennen – jeder Swipe macht die Vorschläge besser."
+            return "Wir lernen dich gerade erst kennen. Jeder Swipe macht die Vorschläge besser."
         }
         var s = "Du stehst auf "
         let moods = topMoods.prefix(2).map(\.0)
         s += moods.isEmpty ? "gute Geschichten" : moods.map { $0 + "e" }.formatted(.list(type: .and)) + " Filme"
-        if let g = topGenres.first?.0 { s += " – am liebsten \(g)" }
+        if let g = topGenres.first?.0 { s += ", am liebsten \(g)" }
         s += "."
         if let d = favoriteDirector { s += " \(d) trifft deinen Nerv." }
         if let a = avoid.first { s += " \(a.moodLabel) eher nicht." }

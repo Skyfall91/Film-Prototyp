@@ -4,7 +4,7 @@
 
 # 🎬 Film-App ausprobieren
 
-**Ein Film statt tausend Kacheln** – so bekommst du die App auf deinen Mac oder dein iPhone.<br>
+**Ein Film statt tausend Kacheln.** So bekommst du die App auf deinen Mac oder dein iPhone.<br>
 Du musst nichts über Programmieren wissen. Mach einfach einen Schritt nach dem anderen.
 
 </div>
@@ -235,22 +235,22 @@ SwiftUI, iOS 26, Xcode 26 oder neuer. Signiert wird mit dem Personal Team, daher
 | Bewertung | Nach dem Schauen bewertet jedes Profil einzeln (4 Stufen + optional Review) |
 | Stimmungssuche | Freitext → Apple Intelligence (on-device, `FoundationModels`) übersetzt in Filter → Suche im eigenen Index. Ohne AI: Stichwortsuche |
 | Wiedergabe | „Abspielen“ = Trailer als Film, im nativen iOS-Player (AVPlayerViewController, 1080p, dreht ins Querformat). YouTube-Stream wird per YouTubeKit aufgelöst |
-| Trailer-Auswahl | Pro Film bis zu 4 offizielle Trailer (Studio-Kanäle, deutsch zuerst, sonst OV) – keine KinoCheck-Uploads |
-| Bewertungen | IMDb, Rotten Tomatoes und Metacritic auf Karte und Liste – in den Details als Links (plus Letterboxd) |
+| Trailer-Auswahl | Pro Film bis zu 4 offizielle Trailer (Studio-Kanäle, deutsch zuerst, sonst OV), keine KinoCheck-Uploads |
+| Bewertungen | IMDb, Rotten Tomatoes und Metacritic auf Karte und Liste, in den Details als Links (plus Letterboxd) |
 | Katalog / Merkliste | bewusst als Nebenweg |
 
 ### Architektur (für die Modellierung)
 
-- `Model/` – `Film`, `Profile`, `Interaction`, `AppStore` (Zustand + JSON-Persistenz)
-- `Model/Account` – Konto, Tarif (`Plan`), `Subscription`, `PurchaseService` (StoreKit 2 mit Demo-Kauf als Rückfall) → später **Strategy**/**Adapter** für Zahlungsanbieter
-- `Engine/RecommendationEngine` – Hybrid: Matrix-Faktorisierung aus MovieLens (Filmbonus + 24 Geschmacksfaktoren) + IMDb + inhaltsbasiertes Modell (Genre, Stimmung, Regie, Cast)
-- `Engine/MoodSearch` – austauschbare KI-Komponente (Apple Intelligence ↔ Stichwort-Fallback) → später **Strategy**
-- `Engine/LibraryImport` – Letterboxd/IMDb-CSV → später **Adapter**
-- `Views/SwipeCard` – generische 4-Richtungs-Swipe-Karte
+- `Model/`: `Film`, `Profile`, `Interaction`, `AppStore` (Zustand + JSON-Persistenz)
+- `Model/Account`: Konto, Tarif (`Plan`), `Subscription`, `PurchaseService` (StoreKit 2 mit Demo-Kauf als Rückfall) → später **Strategy**/**Adapter** für Zahlungsanbieter
+- `Engine/RecommendationEngine`: Hybrid: Matrix-Faktorisierung aus MovieLens (Filmbonus + 24 Geschmacksfaktoren) + IMDb + inhaltsbasiertes Modell (Genre, Stimmung, Regie, Cast)
+- `Engine/MoodSearch`: austauschbare KI-Komponente (Apple Intelligence ↔ Stichwort-Fallback) → später **Strategy**
+- `Engine/LibraryImport`: Letterboxd/IMDb-CSV → später **Adapter**
+- `Views/SwipeCard`: generische 4-Richtungs-Swipe-Karte
 
 ### Daten
 
-`App/Resources/films.json`: 369 Filme und 48 Serien (Staffeln/Folgen von OMDb). Ursprünglich 124 Filme – Blockbuster bis 2026, bewusst auch sehr gut und sehr schlecht bewertete Filme (zum Testen der Empfehlung), 34 Geheimtipps für Filmfans (`niche`) und 2 „Demnächst“. Alle Beschreibungen sind handgeschrieben und spoilerfrei; fehlt eine, schreibt Apple Intelligence einen Anreißer nur aus den Metadaten. Das Onboarding mischt beide Gruppen bei jedem Start neu. Metadaten und Bewertungen kommen von OMDb. Poster liegen aus Urheberrechtsgründen **nicht** im Repo: `films.json` enthält nur ihre Adresse, die App lädt sie beim ersten Start und speichert sie auf dem Gerät (`PosterCache`). Trailer stammen von offiziellen Studio-Kanälen auf YouTube. Deutsche Titel, FSK, Stimmungs-Tags und Kurzbeschreibungen sind von Hand ergänzt (Demo-Daten).
+`App/Resources/films.json`: 369 Filme und 48 Serien (Staffeln/Folgen von OMDb). Ursprünglich 124 Filme, Blockbuster bis 2026, bewusst auch sehr gut und sehr schlecht bewertete Filme (zum Testen der Empfehlung), 34 Geheimtipps für Filmfans (`niche`) und 2 „Demnächst“. Alle Beschreibungen sind handgeschrieben und spoilerfrei; fehlt eine, schreibt Apple Intelligence einen Anreißer nur aus den Metadaten. Das Onboarding mischt beide Gruppen bei jedem Start neu. Metadaten und Bewertungen kommen von OMDb. Poster liegen aus Urheberrechtsgründen **nicht** im Repo: `films.json` enthält nur ihre Adresse, die App lädt sie beim ersten Start und speichert sie auf dem Gerät (`PosterCache`). Trailer stammen von offiziellen Studio-Kanälen auf YouTube. Deutsche Titel, FSK, Stimmungs-Tags und Kurzbeschreibungen sind von Hand ergänzt (Demo-Daten).
 
 ### Demo- und Screenshot-Modus
 

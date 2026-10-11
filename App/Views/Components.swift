@@ -16,7 +16,7 @@ struct PosterView: View {
                     Image(uiImage: image).resizable().scaledToFill()
                         .transition(.opacity)
                 } else {
-                    // Deckender Platzhalter – nie durchsichtig, auch wenn ein Poster fehlt.
+                    // Deckender Platzhalter, nie durchsichtig, auch wenn ein Poster fehlt.
                     LinearGradient(colors: [Color(white: 0.2), Color(white: 0.1)], startPoint: .top, endPoint: .bottom)
                         .overlay(Text(film.title).font(.headline).multilineTextAlignment(.center).padding())
                 }
@@ -179,8 +179,8 @@ struct BlurredBackdrop: View {
             Color.black
             ForEach([layer], id: \.generation) { l in
                 if let id = l.filmID, let image = FilmIndex.film(id)?.posterThumbnail {
-                    // Color.clear legt die Größe fest – das Bild darf das Layout nicht aufblähen.
-                    // Jede Ebene ist deckend (Bild auf Schwarz) – so verdeckt die neue die alte
+                    // Color.clear legt die Größe fest, das Bild darf das Layout nicht aufblähen.
+                    // Jede Ebene ist deckend (Bild auf Schwarz), so verdeckt die neue die alte
                     // vollständig, und beim Entfernen der alten ändert sich nichts mehr.
                     Color.black.overlay {
                         Image(uiImage: image)
@@ -345,7 +345,7 @@ struct ProfileMenu<MenuLabel: View>: View {
                     Toggle(isOn: binding(for: profile)) {
                         Label {
                             Text(profile.name)
-                            Text(profile.isKid ? "Kinderprofil · bis FSK \(profile.maxFSK)" : "\(profile.signalCount) Geschmackssignale")
+                            Text(profile.isKid ? profile.ageLabel : "\(profile.signalCount) Geschmackssignale")
                         } icon: {
                             Image(uiImage: AvatarImage.render(profile))
                         }
@@ -390,7 +390,7 @@ enum AvatarImage {
     private static var cache: [String: UIImage] = [:]
 
     static func render(_ profile: Profile) -> UIImage {
-        let key = "\(profile.id)-\(profile.colorIndex)-\(profile.name)-\(profile.maxFSK)-\(profile.avatar ?? "")"
+        let key = "\(profile.id)-\(profile.colorIndex)-\(profile.name)-\(profile.maxFSK)-\(profile.littleKid)-\(profile.avatar ?? "")"
         if let cached = cache[key] { return cached }
         let renderer = ImageRenderer(content: AvatarView(profile: profile, size: 30))
         renderer.scale = 3
@@ -447,7 +447,7 @@ struct ScoreLinks: View {
                 .padding(.vertical, 6)
             }
         }
-        // Gedrückte Glas-Pillen wachsen leicht – nicht oben/unten abschneiden.
+        // Gedrückte Glas-Pillen wachsen leicht, nicht oben/unten abschneiden.
         .scrollClipDisabled()
         .padding(.vertical, -6)
         .padding(.horizontal, -20)

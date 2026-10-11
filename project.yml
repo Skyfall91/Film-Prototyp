@@ -34,7 +34,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: de.beispiel.filmprototyp
         PRODUCT_NAME: FilmPrototyp
         INFOPLIST_KEY_CFBundleDisplayName: Film
-        INFOPLIST_KEY_NSFaceIDUsageDescription: "Mit Face ID bestätigst du den Demo-Kauf – wie bei Apple Pay."
+        INFOPLIST_KEY_NSFaceIDUsageDescription: "Mit Face ID bestätigst du den Demo-Kauf, wie bei Apple Pay."
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"

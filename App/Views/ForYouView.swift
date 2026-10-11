@@ -11,7 +11,7 @@ struct ForYouView: View {
     @State private var toast: Toast?
     @State private var undoBounce = 0
     /// Feste Warteschlange: Was hinten im Stapel liegt, bleibt dort. Nach jedem Swipe
-    /// wird nur hinten aufgefüllt – sonst würden Karten (und Hintergrund) durch das
+    /// wird nur hinten aufgefüllt, sonst würden Karten (und Hintergrund) durch das
     /// Nachlernen plötzlich ausgetauscht.
     @State private var queue: [Recommendation] = []
     @State private var swiped: [Recommendation] = []
@@ -154,7 +154,7 @@ struct ForYouView: View {
         .padding(.top, 4)
     }
 
-    /// „Dein Film“ / „Deine Serie“ – je nachdem, was oben liegt.
+    /// „Dein Film“ / „Deine Serie“, je nachdem, was oben liegt.
     private var headline: String {
         let together = store.activeProfiles.count > 1
         let series = queue.first?.film.isSeries ?? (store.kindFilter == .series)
@@ -176,7 +176,7 @@ struct ForYouView: View {
                       onCommit: { rec, direction in handle(direction, rec.film) },
                       onTap: { detailFilm = $0.film }) { rec, isTop in
                 RecommendationCard(rec: rec, compact: !isTop, width: width)
-                    // Form explizit setzen – sonst zeigt die Quelle vor der ersten Zoom-Animation
+                    // Form explizit setzen, sonst zeigt die Quelle vor der ersten Zoom-Animation
                     // ein eckiges Rechteck hinter den runden Ecken.
                     .matchedTransitionSource(id: rec.film.id, in: zoom) { $0.clipShape(.rect(cornerRadius: 28)).background(.clear) }
             }
@@ -290,7 +290,7 @@ struct ForYouView: View {
             Image(systemName: "popcorn.fill").font(.system(size: 54)).foregroundStyle(.secondary)
                 .symbolEffect(.bounce, options: .repeat(.periodic(delay: 2)))
             Text("Für heute alles gesehen").font(.title2.weight(.bold))
-            Text("Lockere die Filter, probier die Suche – oder hol die übersprungenen Titel zurück.")
+            Text("Lockere die Filter, probier die Suche, oder hol die übersprungenen Titel zurück.")
                 .multilineTextAlignment(.center).foregroundStyle(.secondary)
             Button("Übersprungene zurückholen") {
                 withAnimation { store.skippedToday = []; store.runtimeFilter = nil; store.kindFilter = .all }
@@ -311,7 +311,7 @@ struct RecommendationCard: View {
 
     static let infoHeight: CGFloat = 76
 
-    /// Das Poster bleibt frei – sein eigener Titelschriftzug ist das Bild.
+    /// Das Poster bleibt frei, sein eigener Titelschriftzug ist das Bild.
     /// Titel, Match und Begründung sitzen ruhig in einem Streifen darunter.
     var body: some View {
         VStack(spacing: 0) {
@@ -355,7 +355,7 @@ struct RecommendationCard: View {
 
 // MARK: - Zeitfilter
 
-/// „Wie viel Zeit hast du?“ als natives Menü – wächst wie das Profilmenü aus dem Button.
+/// „Wie viel Zeit hast du?“ als natives Menü, wächst wie das Profilmenü aus dem Button.
 /// Höchstens/Mindestens, Schnellwahl und ±15 Minuten für jede beliebige Dauer.
 /// Das Menü bleibt beim Einstellen offen, der Stapel dahinter sortiert sich live um.
 struct RuntimeMenu<MenuLabel: View>: View {

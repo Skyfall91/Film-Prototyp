@@ -3,7 +3,7 @@ import Foundation
 import StoreKit
 
 /// Ein Konto gehört einem Haushalt: eine E-Mail, ein Abo, mehrere Profile.
-/// Im Prototyp liegt es nur auf dem Gerät – ein echtes Produkt hätte dafür einen Account-Dienst.
+/// Im Prototyp liegt es nur auf dem Gerät, ein echtes Produkt hätte dafür einen Account-Dienst.
 struct Account: Codable, Hashable, Sendable {
     var email: String
     /// Nur der Hash wird gespeichert, nie das Passwort (Prototyp: SHA-256 mit Salz).
@@ -22,7 +22,7 @@ struct Account: Codable, Hashable, Sendable {
 }
 
 /// Tarife. Der Unterschied ist bewusst klein: Profile, gleichzeitige Streams, Bildqualität.
-/// Jugendschutz (Kinderprofile, FSK) ist in jedem Tarif enthalten – das ist keine Bezahlfunktion.
+/// Jugendschutz (Kinderprofile, FSK) ist in jedem Tarif enthalten, das ist keine Bezahlfunktion.
 enum Plan: String, Codable, CaseIterable, Identifiable, Sendable {
     case solo, duo, familie
 
@@ -37,7 +37,7 @@ enum Plan: String, Codable, CaseIterable, Identifiable, Sendable {
     var tagline: String {
         switch self {
         case .solo: "Für dich allein"
-        case .duo: "Für zwei – mit Zusammen-Modus"
+        case .duo: "Für zwei, mit Zusammen-Modus"
         case .familie: "Für alle auf dem Sofa"
         }
     }
@@ -63,7 +63,7 @@ enum Plan: String, Codable, CaseIterable, Identifiable, Sendable {
         case .familie: 4
         }
     }
-    /// Bildqualität ist kein Verkaufsargument für teurere Tarife – 4K gibt es in jedem.
+    /// Bildqualität ist kein Verkaufsargument für teurere Tarife, 4K gibt es in jedem.
     var quality: String { "4K · HDR" }
     var allowsTogether: Bool { maxProfiles > 1 }
     var productID: String { "de.beispiel.filmprototyp.abo.\(rawValue)" }

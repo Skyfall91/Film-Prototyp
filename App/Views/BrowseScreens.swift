@@ -95,7 +95,7 @@ struct MoodSearchView: View {
                     .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 18))
                 }
             }
-            Text("Die Suche versteht Stimmungen statt nur Titel. Mit Apple Intelligence läuft das komplett auf deinem Gerät – deine Anfrage verlässt das iPhone nicht.")
+            Text("Die Suche versteht Stimmungen statt nur Titel. Mit Apple Intelligence läuft das komplett auf deinem Gerät, deine Anfrage verlässt das iPhone nicht.")
                 .font(.footnote).foregroundStyle(.secondary).padding(.top, 8)
         }
     }
@@ -188,13 +188,14 @@ struct CatalogView: View {
     @Namespace private var zoom
 
     private var maxFSK: Int { store.activeProfiles.map(\.maxFSK).min() ?? 18 }
+    private func allowed(_ film: Film) -> Bool { store.activeProfiles.allSatisfy { $0.allows(film) } }
 
     var body: some View {
         let films = FilmIndex.all.filter {
-            $0.fsk <= maxFSK && !$0.comingSoon && (genre == nil || $0.genres.contains(genre!))
+            allowed($0) && !$0.comingSoon && (genre == nil || $0.genres.contains(genre!))
                 && (kind == 0 || (kind == 2) == $0.isSeries)
         }
-        let soon = FilmIndex.all.filter { $0.comingSoon && $0.fsk <= maxFSK }
+        let soon = FilmIndex.all.filter { $0.comingSoon && allowed($0) }
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
@@ -242,7 +243,10 @@ struct CatalogView: View {
                             .transition(.scale(scale: 0.8).combined(with: .opacity))
                         }
                     }
-                    if maxFSK < 18 {
+                    if store.activeProfiles.contains(where: \.littleKid) {
+                        Label("Nur Titel für kleine Kinder", systemImage: "shield.lefthalf.filled")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    } else if maxFSK < 18 {
                         Label("Gefiltert bis FSK \(maxFSK)", systemImage: "shield.lefthalf.filled")
                             .font(.footnote).foregroundStyle(.secondary)
                     }
@@ -373,7 +377,7 @@ struct ProfileTabView: View {
                                 AvatarView(profile: profile, size: 44)
                                 VStack(alignment: .leading) {
                                     Text(profile.name).font(.title2.weight(.bold))
-                                    Text(profile.isKid ? "Kinderprofil · bis FSK \(profile.maxFSK)" : "Erwachsenenprofil")
+                                    Text(profile.ageLabel)
                                         .font(.caption).foregroundStyle(.secondary)
                                 }
                             }
@@ -423,6 +427,18 @@ struct ProfileTabView: View {
                                         Text("\(sub.plan.name) · \(sub.statusText)").font(.caption).foregroundStyle(.secondary).lineLimit(1)
                                     }
                                 }
+                                Spacer()
+                                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
+                            }
+                            .padding(16)
+                            .contentShape(.rect)
+                        }
+                        .buttonStyle(.plain)
+                        Divider().padding(.leading, 50)
+                        NavigationLink { ManageProfilesView() } label: {
+                            HStack(spacing: 14) {
+                                Image(systemName: "person.2").frame(width: 22)
+                                Text("Profile verwalten")
                                 Spacer()
                                 Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
                             }

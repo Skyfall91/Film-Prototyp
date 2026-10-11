@@ -1,11 +1,12 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Onboarding als kurzes Spiel: Profil → bekannte Filme swipen → optional importieren → Geschmacksprofil → Abo.
+/// Onboarding als kurzes Spiel: Profil → bekannte Filme swipen → Geschmacksprofil → Abo.
+/// Der Import (Letterboxd, IMDb) liegt bewusst nicht hier, sondern im Profil-Tab.
 /// Bezahlt wird erst, nachdem man gesehen hat, wie gut die App einen kennt.
 /// Wird auch zum Anlegen weiterer Profile genutzt (dann ohne Abo-Schritt; bei vollem Tarif mit Upgrade vorab).
 struct OnboardingFlow: View {
-    enum Step { case upgrade, name, calibrate, importData, reveal, plan }
+    enum Step { case upgrade, name, calibrate, favorites, reveal, plan }
     enum Mode { case firstRun, addProfile }
 
     @Environment(AppStore.self) private var store
@@ -16,6 +17,7 @@ struct OnboardingFlow: View {
     var cancel: (() -> Void)?
     @State private var step: Step
     @State private var profileID: UUID?
+    @State private var confirmCancel = false
 
     init(mode: Mode = .firstRun, start: Step? = nil, profileID: UUID? = nil,
          cancel: (() -> Void)? = nil, onFinish: @escaping (UUID) -> Void) {
@@ -35,14 +37,15 @@ struct OnboardingFlow: View {
                     if upgraded { go(.name) } else { cancel?() }
                 }
             case .name:
-                ProfileEditor(isFirst: mode == .firstRun) { name, art, fsk in
-                    profileID = store.addProfile(name: name, colorIndex: art.colorIndex, maxFSK: fsk, avatar: art.id)
-                    go(.calibrate)
+                ProfileEditor(isFirst: mode == .firstRun, cancel: cancel) { name, art, fsk, little in
+                    profileID = store.addProfile(name: name, colorIndex: art.colorIndex, maxFSK: fsk, littleKid: little, avatar: art.id)
+                    // Kleine Kinder wischen nicht selbst, die Eltern suchen Lieblingsfilme aus.
+                    go(little ? .favorites : .calibrate)
                 }
             case .calibrate:
-                if let profileID { CalibrationStep(profileID: profileID) { go(.importData) } }
-            case .importData:
-                if let profileID { ImportStep(profileID: profileID) { go(.reveal) } }
+                if let profileID { CalibrationStep(profileID: profileID) { go(.reveal) } }
+            case .favorites:
+                if let profileID { KidFavoritesStep(profileID: profileID) { go(.reveal) } }
             case .reveal:
                 if let profileID {
                     RevealStep(profileID: profileID, buttonTitle: mode == .firstRun ? "Zeig mir meinen Film" : "Fertig") {
@@ -52,6 +55,28 @@ struct OnboardingFlow: View {
             case .plan:
                 if let profileID { PlanPicker(mode: .onboarding) { _ in onFinish(profileID) } }
             }
+        }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            // Abbrechen geht beim Anlegen weiterer Profile in jedem Schritt, // das halb fertige Profil wird dann wieder entfernt.
+            if cancel != nil, [.calibrate, .favorites].contains(step) {
+                HStack {
+                    Button { confirmCancel = true } label: {
+                        Image(systemName: "xmark").font(.headline).frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .glassEffect(.regular.interactive(), in: .circle)
+                    .accessibilityLabel("Abbrechen")
+                    Spacer()
+                }
+                .padding(.horizontal, 20).padding(.top, 4)
+            }
+        }
+        .confirmationDialog("Profil nicht anlegen?", isPresented: $confirmCancel, titleVisibility: .visible) {
+            Button("Profil verwerfen", role: .destructive) {
+                if let profileID { store.deleteProfile(profileID) }
+                cancel?()
+            }
+            Button("Weitermachen", role: .cancel) {}
         }
         .preferredColorScheme(.dark)
         .onAppear {
@@ -64,16 +89,16 @@ struct OnboardingFlow: View {
     }
 }
 
-/// Langsam scrollende Wand aus Postern – grau, ein Poster leuchtet (wie das App-Icon).
+/// Langsam scrollende Wand aus Postern, grau, ein Poster leuchtet (wie das App-Icon).
 struct PosterWall: View {
-    /// 24 bekannte Filme reichen für eine endlose Wand – jede Spalte läuft im Kreis.
+    /// 24 bekannte Filme reichen für eine endlose Wand, jede Spalte läuft im Kreis.
     private let columns: [[Film]] = {
         let films = Array(FilmIndex.all.filter { !$0.niche && !$0.isSeries && !$0.comingSoon }.shuffled().prefix(24))
         return (0..<3).map { c in films.enumerated().filter { $0.offset % 3 == c }.map(\.element) }
     }()
 
     /// Das eine Poster, das gerade in Farbe leuchtet. Der Fokus springt durchs Bild:
-    /// links, rechts, Mitte, oben, unten – aber immer auf ein Poster, das gerade gut zu sehen ist.
+    /// links, rechts, Mitte, oben, unten, aber immer auf ein Poster, das gerade gut zu sehen ist.
     private struct Focus: Equatable {
         var column: Int
         var filmID: String
@@ -122,7 +147,7 @@ struct PosterWall: View {
 
     private static func tileWidth(_ width: CGFloat) -> CGFloat { (width - 24) / 3 }
 
-    /// Senkrechte Verschiebung einer Spalte zum Zeitpunkt `t` – die mittlere läuft nach oben.
+    /// Senkrechte Verschiebung einer Spalte zum Zeitpunkt `t`, die mittlere läuft nach oben.
     private func offset(_ c: Int, t: Double, width: CGFloat) -> CGFloat {
         let pitch = Self.tileWidth(width) * 1.5 + 12
         let total = pitch * CGFloat(columns[c].count)
@@ -242,7 +267,7 @@ struct CalibrationStep: View {
         .ignoresSafeArea(.keyboard)
         .task {
             guard queue.isEmpty else { return }
-            let films = FilmIndex.calibrationQueue(maxFSK: profile?.maxFSK ?? 18,
+            let films = FilmIndex.calibrationQueue(for: profile,
                                                   excluding: Set(profile?.interactions.keys.map { $0 } ?? []))
             PosterCache.warmUp(films.prefix(10).map(\.id))
             // Karten wachsen nach dem Wechsel animiert auf volle Größe.
@@ -280,7 +305,7 @@ struct CalibrationStep: View {
     }
 }
 
-/// „Wie gut kennen wir dich?“ – Ring, der sich mit jedem Swipe füllt.
+/// „Wie gut kennen wir dich?“, Ring, der sich mit jedem Swipe füllt.
 struct KnowledgeRing: View {
     var value: Double
     var size: CGFloat = 54
@@ -299,9 +324,81 @@ struct KnowledgeRing: View {
     }
 }
 
+// MARK: - Lieblingsfilme für kleine Kinder
+
+/// Kleine Kinder können nicht wischen und lesen. Die Eltern tippen einfach an,
+/// was ihr Kind gern schaut, große Poster, keine Texte nötig.
+struct KidFavoritesStep: View {
+    @Environment(AppStore.self) private var store
+    let profileID: UUID
+    var next: () -> Void
+    @State private var picked: Set<String> = []
+
+    private var profile: Profile? { store.profiles.first { $0.id == profileID } }
+    private var films: [Film] {
+        FilmIndex.all.filter { !$0.comingSoon && (profile?.allows($0) ?? false) }
+            .sorted { ($0.mlSeen ?? 0) > ($1.mlSeen ?? 0) }
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Was schaut \(profile?.name ?? "dein Kind") gern?").font(.largeTitle.weight(.heavy))
+                    Text("Tipp alles an, was dein Kind mag. Daraus lernen die Vorschläge, nur Zeichentrick und Familienfilme.")
+                        .foregroundStyle(.secondary)
+                }
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 12)], spacing: 12) {
+                    ForEach(films) { film in
+                        let on = picked.contains(film.id)
+                        Button {
+                            withAnimation(.snappy) { if on { picked.remove(film.id) } else { picked.insert(film.id) } }
+                        } label: {
+                            PosterView(film: film, cornerRadius: 14)
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 14).strokeBorder(.white, lineWidth: on ? 3 : 0)
+                                }
+                                .overlay(alignment: .topTrailing) {
+                                    if on {
+                                        Image(systemName: "heart.fill")
+                                            .font(.headline).foregroundStyle(.pink)
+                                            .padding(7).background(.white, in: .circle)
+                                            .padding(6)
+                                            .transition(.scale.combined(with: .opacity))
+                                    }
+                                }
+                                .scaleEffect(on ? 0.95 : 1)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(film.title)
+                        .accessibilityAddTraits(on ? .isSelected : [])
+                    }
+                }
+            }
+            .padding(24)
+        }
+        .sensoryFeedback(.selection, trigger: picked)
+        .safeAreaInset(edge: .bottom) {
+            Button {
+                for id in picked { if let film = FilmIndex.film(id) { store.calibrate(profile: profileID, film: film, .loved) } }
+                next()
+            } label: {
+                Text(picked.isEmpty ? "Überspringen" : "Weiter mit \(picked.count)")
+                    .contentTransition(.numericText())
+                    .font(.headline).frame(maxWidth: .infinity).padding(.vertical, 6)
+            }
+            .buttonStyle(.glassProminent)
+            .foregroundStyle(.black)
+            .controlSize(.large)
+            .padding(.horizontal, 24).padding(.bottom, 8)
+        }
+        .task { PosterCache.warmUp(films.prefix(12).map(\.id)) }
+    }
+}
+
 // MARK: - Import
 
-private struct ImportStep: View {
+struct ImportStep: View {
     @Environment(AppStore.self) private var store
     let profileID: UUID
     var next: () -> Void
@@ -315,7 +412,7 @@ private struct ImportStep: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 Text("Noch genauer?").font(.largeTitle.weight(.heavy))
-                Text("Bring deine Bewertungen mit – oder such dir deine Lieblingsfilme raus. Alles optional.")
+                Text("Bring deine Bewertungen mit, oder such dir deine Lieblingsfilme raus. Alles optional.")
                     .foregroundStyle(.secondary)
 
                 Button { showImporter = true } label: {
@@ -375,7 +472,7 @@ private struct ImportStep: View {
         }
         .safeAreaInset(edge: .bottom) {
             Button(action: next) {
-                Text(result == nil ? "Überspringen" : "Weiter").font(.headline).frame(maxWidth: .infinity).padding(.vertical, 6)
+                Text("Fertig").font(.headline).frame(maxWidth: .infinity).padding(.vertical, 6)
             }
             .buttonStyle(.glassProminent)
             .foregroundStyle(.black)
@@ -401,7 +498,7 @@ private struct ImportStep: View {
 
     private var searchResults: [Film] {
         let q = search.trimmingCharacters(in: .whitespaces)
-        let pool = FilmIndex.all.filter { !$0.comingSoon && $0.fsk <= (profile?.maxFSK ?? 18) }
+        let pool = FilmIndex.all.filter { !$0.comingSoon && (profile?.allows($0) ?? true) }
         guard !q.isEmpty else {
             return pool.filter { profile?.interactions[$0.id] == .loved }
         }

@@ -28,7 +28,7 @@ struct Film: Codable, Identifiable, Hashable, Sendable {
     /// Kleinere Filme, die vor allem Filmfans kennen.
     var niche: Bool = false
     /// Aus 32 Mio. echten Bewertungen (MovieLens): wie sehr Menschen den Film über ihrem
-    /// eigenen Schnitt bewerten – und seine 24 „Geschmacksfaktoren“ („Leute wie du“).
+    /// eigenen Schnitt bewerten, und seine 24 „Geschmacksfaktoren“ („Leute wie du“).
     /// Bei ganz neuen Filmen aus Genre, Stimmung, Regie und IMDb geschätzt.
     let mlBias: Double?
     let mlFactors: [Double]?
@@ -42,7 +42,11 @@ struct Film: Codable, Identifiable, Hashable, Sendable {
 
     var isSeries: Bool { kind == "series" }
 
-    /// Merkmale, aus denen das Geschmacksprofil lernt – mit Gewichtung.
+    /// Für kleine Kinder: ohne Altersbeschränkung und als Animations- oder Familientitel gedacht.
+    /// (FSK 0 allein reicht nicht, auch „Notting Hill“ ist ab 0.)
+    var forLittleKids: Bool { fsk == 0 && (genres.contains("Animation") || genres.contains("Familie")) }
+
+    /// Merkmale, aus denen das Geschmacksprofil lernt, mit Gewichtung.
     /// Einmal pro Film berechnet: Die Empfehlung fragt sie bei jedem Swipe für alle Titel ab.
     var features: [(key: String, weight: Double)] { FilmIndex.features[id] ?? computeFeatures() }
 
@@ -62,10 +66,10 @@ struct Film: Codable, Identifiable, Hashable, Sendable {
         isSeries ? "\(yearText) · \(seasonsText) · FSK \(fsk)" : "\(year) · \(runtimeText) · FSK \(fsk)"
     }
 
-    /// „2008–2013“ bei abgeschlossenen Serien, sonst nur das Startjahr.
+    /// „2008-2013“ bei abgeschlossenen Serien, sonst nur das Startjahr.
     var yearText: String {
         guard isSeries, let endYear, endYear != year else { return String(year) }
-        return "\(year)–\(endYear)"
+        return "\(year)-\(endYear)"
     }
 
     var seasonsText: String {
@@ -73,7 +77,7 @@ struct Film: Codable, Identifiable, Hashable, Sendable {
         return n == 1 ? "1 Staffel" : "\(n) Staffeln"
     }
 
-    /// Erste Folge – Startpunkt, wenn ein Profil die Serie noch nicht angefangen hat.
+    /// Erste Folge, Startpunkt, wenn ein Profil die Serie noch nicht angefangen hat.
     var firstEpisode: EpisodeRef? {
         guard let s = seasons?.first, let e = s.episodes.first else { return nil }
         return EpisodeRef(season: s.number, episode: e.number)
@@ -83,7 +87,7 @@ struct Film: Codable, Identifiable, Hashable, Sendable {
         seasons?.first { $0.number == ref.season }?.episodes.first { $0.number == ref.episode }
     }
 
-    /// Folge nach `ref` – über Staffelgrenzen hinweg. `nil` am Serienende.
+    /// Folge nach `ref`, über Staffelgrenzen hinweg. `nil` am Serienende.
     func episode(after ref: EpisodeRef) -> EpisodeRef? {
         guard let seasons, let si = seasons.firstIndex(where: { $0.number == ref.season }) else { return nil }
         let eps = seasons[si].episodes
@@ -94,14 +98,14 @@ struct Film: Codable, Identifiable, Hashable, Sendable {
         return EpisodeRef(season: seasons[si + 1].number, episode: first.number)
     }
 
-    /// Dekodiertes Poster aus dem Cache – wird beim Swipen nicht jedes Frame neu geladen.
+    /// Dekodiertes Poster aus dem Cache, wird beim Swipen nicht jedes Frame neu geladen.
     var posterImage: UIImage? { PosterCache.poster(id) }
     /// Winzige Version für den unscharfen Hintergrund (Blur auf 40 px statt 800 px).
     var posterThumbnail: UIImage? { PosterCache.thumbnail(id) }
 }
 
 /// Ein Platz pro Poster. Views beobachten nur ihren eigenen Platz: Kommt ein Poster an,
-/// zeichnet sich genau diese Kachel neu – nicht jede Kachel der App.
+/// zeichnet sich genau diese Kachel neu, nicht jede Kachel der App.
 @Observable
 final class PosterSlot {
     var image: UIImage?
@@ -280,13 +284,13 @@ enum FilmIndex {
 
     /// Kalibrierungs-Stapel: bei jedem Start neu gemischt, abwechselnd bekannte Filme
     /// und Geheimtipps für Filmfans. Bereits bewertete Filme fallen raus.
-    static func calibrationQueue(maxFSK: Int, excluding rated: Set<String> = []) -> [Film] {
+    static func calibrationQueue(for profile: Profile?, excluding rated: Set<String> = []) -> [Film] {
         // Nur Filme: Das Lernen aus echten Bewertungen (MovieLens) ist für Filme geprüft.
-        let pool = all.filter { !$0.isSeries && !$0.comingSoon && $0.fsk <= maxFSK && !rated.contains($0.id) }
+        let pool = all.filter { !$0.isSeries && !$0.comingSoon && (profile?.allows($0) ?? true) && !rated.contains($0.id) }
         var popular = pool.filter { !$0.niche }.shuffled()
         var niche = pool.filter(\.niche).shuffled()
         var queue: [Film] = []
-        // Grob 3:2 – genug Bekanntes, damit man viel bewerten kann, aber regelmäßig Geheimtipps.
+        // Grob 3:2, genug Bekanntes, damit man viel bewerten kann, aber regelmäßig Geheimtipps.
         while !popular.isEmpty || !niche.isEmpty {
             for _ in 0..<3 where !popular.isEmpty { queue.append(popular.removeFirst()) }
             for _ in 0..<2 where !niche.isEmpty { queue.append(niche.removeFirst()) }
@@ -298,4 +302,11 @@ enum FilmIndex {
 /// Darstellung der Stimmungs-Tags (Index nutzt Kleinschreibung).
 extension String {
     var moodLabel: String { prefix(1).uppercased() + dropFirst() }
+
+    /// Gedankenstriche aus KI-Texten entfernen: Die App verwendet keine.
+    /// Zahlenbereiche bekommen einen Bindestrich, sonst wird ein Komma daraus.
+    var withoutDashes: String {
+        replacing(/(\d)\s?[\u{2013}\u{2014}]\s?(\d)/) { "\($0.1)-\($0.2)" }
+            .replacing(/\s*[\u{2013}\u{2014}]\s*/, with: ", ")
+    }
 }

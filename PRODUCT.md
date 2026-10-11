@@ -5,7 +5,7 @@
 product
 
 ## Users
-Menschen, die abends streamen wollen und sich vor lauter Kacheln nicht entscheiden können – allein oder zu zweit/als Familie auf dem Sofa. Erster Adressat ist das MAS-Pitch-Team der TH Köln und die Jury: Der Prototyp muss die Idee in Sekunden verständlich machen.
+Menschen, die abends streamen wollen und sich vor lauter Kacheln nicht entscheiden können, allein oder zu zweit/als Familie auf dem Sofa. Erster Adressat ist das MAS-Pitch-Team der TH Köln und die Jury: Der Prototyp muss die Idee in Sekunden verständlich machen.
 
 ## Product Purpose
 „Ein Film statt tausend Kacheln“: Nach einem kurzen Swipe-Onboarding zeigt die App genau einen passenden Film mit Match-Prozent und Begründung. Erfolg heißt: schneller entscheiden, öfter einen Film wirklich mögen.

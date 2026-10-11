@@ -42,7 +42,7 @@ struct AuthFlow: View {
             Text("Ein Film.\nGenau deiner.")
                 .font(.system(size: 46, weight: .heavy, design: .rounded))
                 .lineSpacing(-4)
-            Text("Statt endlos zu scrollen, zeigen wir dir genau einen Film, der zu dir passt. Dafür lernen wir dich in einer Minute kennen – besser, als du denkst.")
+            Text("Statt endlos zu scrollen, zeigen wir dir genau einen Film, der zu dir passt. Dafür lernen wir dich in einer Minute kennen, besser, als du denkst.")
                 .foregroundStyle(.secondary)
             Button { go(.register) } label: {
                 Text("Konto erstellen").font(.headline).frame(maxWidth: .infinity).padding(.vertical, 6)
@@ -141,7 +141,7 @@ private struct RegisterForm: View {
     private var valid: Bool { !email.trimmingCharacters(in: .whitespaces).isEmpty && rules.allSatisfy(\.1) && consent }
 
     var body: some View {
-        AuthCard(title: "Konto erstellen", subtitle: "Ein Konto für deinen Haushalt – Profile legst du gleich danach an.", back: back) {
+        AuthCard(title: "Konto erstellen", subtitle: "Ein Konto für deinen Haushalt, Profile legst du gleich danach an.", back: back) {
             VStack(spacing: 0) {
                 FieldRow(symbol: "envelope", placeholder: "E-Mail", text: $email, content: .emailAddress)
                 Divider().padding(.leading, 52)
@@ -244,12 +244,12 @@ private struct LoginForm: View {
             Button("Neues Konto erstellen", action: switchToRegister)
             Button("Abbrechen", role: .cancel) {}
         } message: {
-            Text("Im fertigen Dienst kommt ein Link per E-Mail. Im Prototyp liegt das Konto nur auf diesem Gerät – du kannst einfach ein neues erstellen.")
+            Text("Im fertigen Dienst kommt ein Link per E-Mail. Im Prototyp liegt das Konto nur auf diesem Gerät, du kannst einfach ein neues erstellen.")
         }
     }
 }
 
-/// Runde Checkbox statt Schalter – für Zustimmungen.
+/// Runde Checkbox statt Schalter, für Zustimmungen.
 struct CheckToggle: ToggleStyle {
     func makeBody(configuration: Configuration) -> some View {
         Button { configuration.isOn.toggle() } label: {
@@ -317,7 +317,7 @@ struct PlanPicker: View {
                 }
                 VStack(alignment: .leading, spacing: 6) {
                     Text(isFirstPurchase
-                         ? "7 Tage kostenlos, danach \(store.purchases.displayPrice(selected)) pro Monat. Jederzeit kündbar – auch in der Testphase."
+                         ? "7 Tage kostenlos, danach \(store.purchases.displayPrice(selected)) pro Monat. Jederzeit kündbar, auch in der Testphase."
                          : "Der neue Preis gilt ab der nächsten Abrechnung. Jederzeit kündbar.")
                     Text(store.purchases.storeKitAvailable
                          ? "Bezahlt wird über den App Store. In dieser Testumgebung wird nichts abgebucht."
@@ -373,7 +373,7 @@ struct PlanPicker: View {
         }
     }
 
-    /// Erst feiern, dann übernehmen – sonst springt die App sofort weiter und der Moment ist weg.
+    /// Erst feiern, dann übernehmen, sonst springt die App sofort weiter und der Moment ist weg.
     private func celebrate(_ sub: Subscription) {
         withAnimation(.smooth(duration: 0.35)) { celebrating = sub }
     }
@@ -440,7 +440,7 @@ struct PlanPicker: View {
                     }
                 }
                 if tooSmall {
-                    Text("Ihr habt schon \(store.profiles.count) Profile – in \(plan.name) könnt ihr nur eines nutzen.")
+                    Text("Ihr habt schon \(store.profiles.count) Profile, in \(plan.name) könnt ihr nur eines nutzen.")
                         .font(.caption).foregroundStyle(.orange)
                 }
             }
@@ -484,7 +484,7 @@ struct PlanPicker: View {
 // MARK: - Nach dem Kauf
 
 /// Der Moment nach dem Kauf, wie bei Apple Pay: Das Häkchen zeichnet sich, dazu ein kurzer
-/// Erfolgs-Haptik-Impuls. Danach erscheint in Ruhe, was jetzt dazugehört – und ein Button.
+/// Erfolgs-Haptik-Impuls. Danach erscheint in Ruhe, was jetzt dazugehört, und ein Button.
 struct PurchaseCelebration: View {
     let subscription: Subscription
     var done: () -> Void
@@ -572,7 +572,7 @@ struct PurchaseCelebration: View {
 
 // MARK: - Demo-Kauf
 
-/// Bestätigungsblatt im Stil des System-Kaufblatts – ausdrücklich als Demo gekennzeichnet.
+/// Bestätigungsblatt im Stil des System-Kaufblatts, ausdrücklich als Demo gekennzeichnet.
 /// Es werden keine Zahlungsdaten abgefragt und nichts abgebucht.
 private struct DemoCheckout: View {
     let plan: Plan
@@ -580,14 +580,14 @@ private struct DemoCheckout: View {
     var confirmed: () -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var phase = 0   // 0 bereit, 1 bestätigt …, 2 fertig
-    /// Das Blatt ist genau so hoch wie sein Inhalt – der Button sitzt unten wie bei Apple Pay.
+    /// Das Blatt ist genau so hoch wie sein Inhalt, der Button sitzt unten wie bei Apple Pay.
     @State private var height: CGFloat = 470
     @State private var showInfo = false
 
     var body: some View {
         VStack(spacing: 18) {
             HStack {
-                // Der Hinweis zum Demo-Kauf steckt hinter der Markierung – die Kasse bleibt ruhig.
+                // Der Hinweis zum Demo-Kauf steckt hinter der Markierung, die Kasse bleibt ruhig.
                 Button { showInfo = true } label: {
                     Label("Demo-Kauf", systemImage: "info.circle")
                         .font(.caption.weight(.semibold))
@@ -596,7 +596,7 @@ private struct DemoCheckout: View {
                 }
                 .buttonStyle(.plain)
                 .popover(isPresented: $showInfo) {
-                    Text("Face ID ist echt, der Kauf nicht – es wird nichts abgebucht. Im fertigen Dienst läuft die Zahlung über Apple Pay bzw. den App Store.")
+                    Text("Face ID ist echt, der Kauf nicht, es wird nichts abgebucht. Im fertigen Dienst läuft die Zahlung über Apple Pay bzw. den App Store.")
                         .font(.footnote)
                         .frame(width: 260)
                         .padding()
@@ -622,7 +622,7 @@ private struct DemoCheckout: View {
                     }
                     .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).strokeBorder(.white.opacity(0.12)))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Film – \(plan.name)").font(.headline)
+                    Text("Film: \(plan.name)").font(.headline)
                     Text("Abo · monatlich").font(.subheadline).foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -697,8 +697,8 @@ private struct DemoCheckout: View {
         }
     }
 
-    /// Echte Bestätigung mit Face ID (oder Code). Ohne eingerichtete Sperre – etwa im
-    /// Simulator – geht es mit einer kurzen Pause weiter, damit die Demo trotzdem läuft.
+    /// Echte Bestätigung mit Face ID (oder Code). Ohne eingerichtete Sperre, etwa im
+    /// Simulator, geht es mit einer kurzen Pause weiter, damit die Demo trotzdem läuft.
     private func authenticate() async -> Bool {
         let context = LAContext()
         context.localizedCancelTitle = "Abbrechen"
@@ -708,7 +708,7 @@ private struct DemoCheckout: View {
             return true
         }
         return (try? await context.evaluatePolicy(.deviceOwnerAuthentication,
-                                                  localizedReason: "Abo „Film – \(plan.name)“ bestätigen")) ?? false
+                                                  localizedReason: "Abo „Film: \(plan.name)“ bestätigen")) ?? false
     }
 }
 

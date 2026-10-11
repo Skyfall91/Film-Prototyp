@@ -2,7 +2,7 @@ import Foundation
 import FoundationModels
 
 /// Strukturierte Interpretation einer freien Stimmungs-Anfrage.
-/// Das Sprachmodell kennt den Katalog NICHT – es übersetzt nur die Anfrage
+/// Das Sprachmodell kennt den Katalog NICHT, es übersetzt nur die Anfrage
 /// in Filter. Gesucht wird danach im eigenen Index (keine erfundenen Filme).
 @Generable
 struct MoodQuery {
@@ -44,9 +44,9 @@ enum MoodSearch {
     static var availabilityNote: String {
         switch SystemLanguageModel.default.availability {
         case .available: "Apple Intelligence · auf dem Gerät"
-        case .unavailable(.appleIntelligenceNotEnabled): "Apple Intelligence ist ausgeschaltet – Stichwortsuche aktiv"
-        case .unavailable(.deviceNotEligible): "Gerät ohne Apple Intelligence – Stichwortsuche aktiv"
-        case .unavailable(.modelNotReady): "Modell wird geladen – Stichwortsuche aktiv"
+        case .unavailable(.appleIntelligenceNotEnabled): "Apple Intelligence ist ausgeschaltet, Stichwortsuche aktiv"
+        case .unavailable(.deviceNotEligible): "Gerät ohne Apple Intelligence, Stichwortsuche aktiv"
+        case .unavailable(.modelNotReady): "Modell wird geladen, Stichwortsuche aktiv"
         default: "Stichwortsuche aktiv"
         }
     }
@@ -82,7 +82,7 @@ enum MoodSearch {
         let fsk = min(profiles.map(\.maxFSK).min() ?? 18, q.familyFriendly ? 6 : 18)
 
         let scored: [(Film, Double)] = FilmIndex.all.compactMap { film in
-            guard film.fsk <= fsk, film.id != reference?.id else { return nil }
+            guard film.fsk <= fsk, profiles.allSatisfy({ $0.allows(film) }), film.id != reference?.id else { return nil }
             if q.maxRuntimeMinutes > 0, film.runtime > q.maxRuntimeMinutes { return nil }
             let tags = Set(film.moods) .union(film.genres.map { $0.lowercased() })
             if !tags.isDisjoint(with: exclude) { return nil }
@@ -168,11 +168,11 @@ enum TasteWriter {
 
     private static func cacheKey(_ profile: Profile) -> String { "tasteSentence.\(profile.id)" }
 
-    /// Bereits generierter Satz, solange die Geschmacksdaten unverändert sind – sofort, ohne Modellaufruf.
+    /// Bereits generierter Satz, solange die Geschmacksdaten unverändert sind, sofort, ohne Modellaufruf.
     static func cached(for profile: Profile) -> String? {
         guard let entry = UserDefaults.standard.dictionary(forKey: cacheKey(profile)) as? [String: String],
               entry["facts"] == facts(TasteSummary(profile: profile)) else { return nil }
-        return entry["text"]
+        return entry["text"]?.withoutDashes
     }
 
     static func sentence(for profile: Profile) async -> (String, Bool) {
@@ -185,11 +185,12 @@ enum TasteWriter {
                 Schreibe EINEN kurzen deutschen Satz (max. 25 Wörter), der den Filmgeschmack beschreibt. \
                 Regeln: Beginne mit „Du“. Keine Begrüßung, keine Anrede, kein Name. \
                 Verwende keine geschlechtsspezifischen Wörter (z. B. keine Personenbezeichnungen wie \
-                Entdecker, Fan, Liebhaber – weder männlich noch weiblich). Keine Ich-Perspektive. \
-                Keine Filmtitel und keine Personennamen.
+                Entdecker, Fan, Liebhaber, weder männlich noch weiblich). Keine Ich-Perspektive. \
+                Keine Filmtitel und keine Personennamen. Keine Gedankenstriche.
                 """)
             let text = try await session.respond(to: facts).content
                 .trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: "\"„“")))
+                .withoutDashes
             guard isNeutral(text) else { return (summary.sentence, false) }
             UserDefaults.standard.set(["facts": facts, "text": text], forKey: cacheKey(profile))
             return (text, true)
@@ -202,7 +203,7 @@ enum TasteWriter {
     static func isNeutral(_ text: String) -> Bool {
         let t = text.lowercased()
         guard t.hasPrefix("du"), text.count < 220 else { return false }
-        // „ich“ nur als ganzes Wort – sonst fliegen „dich“ und „mich“ mit raus.
+        // „ich“ nur als ganzes Wort, sonst fliegen „dich“ und „mich“ mit raus.
         if t.firstMatch(of: /\bich\b/) != nil { return false }
         let banned = ["hallo", "hi ", "hey", "liebe ", "lieber ", "liebe:",
                       "entdeckerin", "entdecker", "liebhaberin", "liebhaber", "kennerin", "kenner",
@@ -216,12 +217,12 @@ enum TasteWriter {
 // MARK: - Notlösung: Anreißer schreiben, wenn ein Film keine Beschreibung hat
 
 /// Schreibt NUR aus gesicherten Metadaten (Genre, Stimmung, Regie, Laufzeit) einen
-/// kurzen, spoilerfreien Anreißer. Keine Handlungsdetails – das kleine Modell kennt
+/// kurzen, spoilerfreien Anreißer. Keine Handlungsdetails, das kleine Modell kennt
 /// viele Filme nicht und würde sonst raten. Ergebnis wird gecacht.
 enum SynopsisWriter {
     static func teaser(for film: Film) async -> String? {
         let cacheKey = "teaser.\(film.id)"
-        if let cached = UserDefaults.standard.string(forKey: cacheKey) { return cached }
+        if let cached = UserDefaults.standard.string(forKey: cacheKey) { return cached.withoutDashes }
         guard MoodSearch.isAppleIntelligenceAvailable else { return nil }
         let facts = """
             Titel: \(film.title). Jahr: \(film.year). Genres: \(film.genres.joined(separator: ", ")). \
@@ -229,12 +230,13 @@ enum SynopsisWriter {
             """
         do {
             let session = LanguageModelSession(instructions: """
-                Schreibe 1–2 kurze deutsche Sätze, die neugierig auf einen Film machen. \
+                Schreibe 1-2 kurze deutsche Sätze, die neugierig auf einen Film machen. \
                 Nutze NUR die gegebenen Fakten, erfinde keine Handlung, keine Figuren und keine Wendungen. \
-                Beschreibe Stimmung und Art des Films. Keine Anrede, keine gegenderten Wörter.
+                Beschreibe Stimmung und Art des Films. Keine Anrede, keine gegenderten Wörter, keine Gedankenstriche.
                 """)
             let text = try await session.respond(to: facts).content
                 .trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: "\"„“")))
+                .withoutDashes
             UserDefaults.standard.set(text, forKey: cacheKey)
             return text
         } catch {

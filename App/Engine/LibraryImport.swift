@@ -6,7 +6,7 @@ struct ImportResult {
     var source: String
     var totalRows: Int
     var matched: [(Film, Interaction)]
-    /// Bewertete Filme, die nicht im Katalog sind – fließen trotzdem ins Geschmacksprofil,
+    /// Bewertete Filme, die nicht im Katalog sind, fließen trotzdem ins Geschmacksprofil,
     /// sobald Metadaten verfügbar sind (im Prototyp nur gezählt).
     var unmatchedCount: Int { totalRows - matched.count }
 }
@@ -37,7 +37,7 @@ enum LibraryImport {
             guard let film else { continue }
             var interaction = Interaction.liked
             if let ratingCol, row.count > ratingCol, let r = Double(row[ratingCol].replacingOccurrences(of: ",", with: ".")) {
-                let stars = isIMDb ? r / 2 : r   // IMDb 1–10, Letterboxd 0,5–5
+                let stars = isIMDb ? r / 2 : r   // IMDb 1-10, Letterboxd 0,5-5
                 interaction = stars >= 4.5 ? .loved : stars >= 3.5 ? .liked : stars >= 2.5 ? .ratedOkay : .disliked
             }
             matched.append((film, interaction))

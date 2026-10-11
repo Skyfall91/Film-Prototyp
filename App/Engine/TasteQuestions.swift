@@ -1,7 +1,7 @@
 import Foundation
 
 /// Gezielte Frage im „KI beibringen“-Chat. Keine „Kennst du Film X?“-Fragen (das ist Swipen),
-/// sondern Fragen danach, wie jemand Filme erlebt – jede Antwort wird in Merkmale übersetzt.
+/// sondern Fragen danach, wie jemand Filme erlebt, jede Antwort wird in Merkmale übersetzt.
 struct TasteQuestion: Identifiable, Equatable {
     struct Answer: Identifiable, Equatable {
         var label: String
@@ -10,7 +10,7 @@ struct TasteQuestion: Identifiable, Equatable {
         var id: String { label }
     }
 
-    /// Wie geantwortet wird – damit der Chat nicht nur aus Entweder-oder besteht.
+    /// Wie geantwortet wird, damit der Chat nicht nur aus Entweder-oder besteht.
     enum Kind: Equatable {
         /// Eine Antwort antippen.
         case choice
@@ -90,16 +90,16 @@ enum TasteQuestions {
               ["m:gefühlvoll": 1.0, "m:nachdenklich": -0.8]),
         scale("s-laenge", "Wie lang darf es werden?", "90 Minuten, zack", "Gern drei Stunden",
               ["m:episch": 1.2, "m:leicht": -0.4]),
-        scale("s-humor", "Wie viel Humor brauchst du – selbst in ernsten Filmen?", "Ernst bleibt ernst", "Immer ein Witz",
+        scale("s-humor", "Wie viel Humor brauchst du, selbst in ernsten Filmen?", "Ernst bleibt ernst", "Immer ein Witz",
               ["m:lustig": 1.2, "m:intensiv": -0.4]),
         scale("s-gross", "Wie groß soll die Geschichte sein?", "Ein Zimmer, zwei Menschen", "Das Schicksal der Galaxie",
               ["m:episch": 1.2, "m:bildgewaltig": 0.6, "m:ruhig": -0.6]),
-        open("o-leben", "Wenn dein Leben ein Film wäre – welcher käme dem am nächsten?", .liked),
+        open("o-leben", "Wenn dein Leben ein Film wäre, welcher käme dem am nächsten?", .liked),
         open("o-ueberschaetzt", "Welcher gefeierte Film hat dich komplett kaltgelassen?", .disliked),
         open("o-kindheit", "Welchen Film hast du als Kind rauf und runter geschaut?", .liked),
         open("o-insel", "Einsame Insel, ein einziger Film. Welcher?", .loved),
         open("o-nochmal", "Welchen Film würdest du gern nochmal zum ersten Mal sehen?", .loved),
-        q("c-zeitmaschine", "Du darfst in einen Film hineinspringen – aber nur als Statist. Wohin?", [
+        q("c-zeitmaschine", "Du darfst in einen Film hineinspringen, aber nur als Statist. Wohin?", [
             ("Auf ein Raumschiff", ["g:Science-Fiction": 1.2]), ("Auf einen Ball im 19. Jahrhundert", ["g:Historie": 0.8, "m:romantisch": 0.8]),
             ("In eine Bar voller Gangster", ["g:Krimi": 1.0, "m:düster": 0.4]), ("Ins Zauberschloss", ["g:Fantasy": 1.2, "m:familienfreundlich": 0.4])]),
         q("c-plottwist", "Plot-Twist in der letzten Minute: Alles war ein Traum.", [
@@ -121,7 +121,7 @@ enum TasteQuestions {
             ("Ein Satz", ["m:nachdenklich": 1.0]), ("Ein Bild", ["m:bildgewaltig": 1.2]), ("Ein Song", ["m:musikalisch": 1.2]), ("Ein Gefühl", ["m:gefühlvoll": 1.2])]),
         q("c-sport", "Das große Finale, die letzte Sekunde, das ganze Stadion hält die Luft an.", [
             ("Ich stehe vom Sofa auf", ["g:Sport": 1.2, "m:inspirierend": 1.0]), ("Sport im Film? Gähn", ["g:Sport": -1.2])]),
-        q("c-dokustil", "Ein Film, der aussieht wie eine echte Doku – wackelige Kamera, keine Stars.", [
+        q("c-dokustil", "Ein Film, der aussieht wie eine echte Doku: wackelige Kamera, keine Stars.", [
             ("Fühlt sich echt an", ["m:intensiv": 0.8, "g:Drama": 0.6]), ("Ich will Kino, kein Handyvideo", ["m:bildgewaltig": 0.8, "m:episch": 0.4])]),
         q("c-familie", "Filmabend mit der ganzen Familie, von 8 bis 80. Was läuft?", [
             ("Ein Animationsfilm", ["g:Animation": 1.0, "m:familienfreundlich": 1.0]), ("Ein großes Abenteuer", ["g:Abenteuer": 1.0, "m:episch": 0.4]),
@@ -162,9 +162,9 @@ enum TasteQuestions {
               ["m:intensiv": 1.0, "g:Horror": 0.6, "m:familienfreundlich": -0.6]),
         scale("s-tempo", "Welches Tempo magst du?", "Langsam und ruhig", "Vollgas",
               ["m:actionreich": 1.0, "m:ruhig": -1.0]),
-        open("o-umgehauen", "Welcher Film hat dich zuletzt richtig umgehauen – und warum?", .loved),
+        open("o-umgehauen", "Welcher Film hat dich zuletzt richtig umgehauen, und warum?", .loved),
         open("o-erklaeren", "Welchen Film würdest du jemandem zeigen, um zu erklären, wer du bist?", .loved),
-        open("o-eingeschlafen", "Bei welchem Film bist du eingeschlafen – oder hättest es gern?", .disliked),
+        open("o-eingeschlafen", "Bei welchem Film bist du eingeschlafen, oder hättest es gern?", .disliked),
         open("o-szene", "Welche Filmszene geht dir einfach nicht mehr aus dem Kopf?", .liked)
     ]
 
@@ -186,7 +186,7 @@ enum TasteQuestions {
             ("Je mehr, desto besser", ["m:gruselig": 1.5, "g:Horror": 1.2]),
             ("Ein bisschen Nervenkitzel", ["m:spannend": 1.0, "m:gruselig": 0.2]),
             ("Gar keine", ["m:gruselig": -1.5, "g:Horror": -1.5])]),
-        q("welten", "Was zieht dich mehr rein: eine Welt, die es nicht gibt – oder eine Geschichte, die so passiert sein könnte?", [
+        q("welten", "Was zieht dich mehr rein: eine Welt, die es nicht gibt, oder eine Geschichte, die so passiert sein könnte?", [
             ("Fremde Welten", ["g:Science-Fiction": 1.0, "g:Fantasy": 1.0, "m:episch": 0.6]),
             ("Echtes Leben", ["g:Drama": 1.0, "m:nachdenklich": 0.6, "m:ruhig": 0.4]),
             ("Beides", ["g:Science-Fiction": 0.4, "g:Drama": 0.4])]),
@@ -201,7 +201,7 @@ enum TasteQuestions {
             ("Herzstück", ["m:romantisch": 1.5, "g:Romanze": 1.0]),
             ("Nebensache", ["m:romantisch": -0.4]),
             ("Bitte ohne", ["m:romantisch": -1.2, "g:Romanze": -1.0])]),
-        q("animation", "Animationsfilme – nur was für Kinder?", [
+        q("animation", "Animationsfilme: nur was für Kinder?", [
             ("Nein, oft die besten", ["g:Animation": 1.5, "m:bunt": 0.6]),
             ("Ab und zu gern", ["g:Animation": 0.5]),
             ("Eher nicht meins", ["g:Animation": -1.2])]),
@@ -214,10 +214,10 @@ enum TasteQuestions {
         q("krimi", "Ein düsterer Krimi am Sonntagabend?", [
             ("Perfekt", ["m:düster": 1.0, "g:Krimi": 1.0, "g:Thriller": 0.6]),
             ("Zu schwer für Sonntag", ["m:düster": -1.0, "m:leicht": 0.6])]),
-        q("hart", "Filme, die richtig wehtun – Gewalt, harte Themen?", [
+        q("hart", "Filme, die richtig wehtun: Gewalt, harte Themen?", [
             ("Wenn's gut gemacht ist, ja", ["m:intensiv": 1.2, "m:düster": 0.6]),
             ("Lieber nicht", ["m:intensiv": -1.2, "m:gemütlich": 0.6])]),
-        q("gross", "Drei Stunden Epos auf der großen Leinwand – Vorfreude oder Respekt?", [
+        q("gross", "Drei Stunden Epos auf der großen Leinwand: Vorfreude oder Respekt?", [
             ("Vorfreude", ["m:episch": 1.4, "m:bildgewaltig": 0.8]),
             ("Respekt", ["m:episch": -0.8, "m:leicht": 0.4])]),
         q("reden", "Zwei Stunden lang reden nur zwei Menschen miteinander. Spannend oder Folter?", [
@@ -231,7 +231,7 @@ enum TasteQuestions {
             ("Musical", ["m:musikalisch": -1.2, "g:Musical": -1.2]),
             ("Liebesdrama", ["m:romantisch": -1.2, "g:Romanze": -0.8]),
             ("Weltraum", ["g:Science-Fiction": -1.2])]),
-        q("echt", "Abspann – und du weißt nicht, was davon echt war. Und jetzt?", [
+        q("echt", "Abspann. Und du weißt nicht, was davon echt war. Und jetzt?", [
             ("Sofort nochmal schauen", ["m:wendungsreich": 1.4, "g:Mystery": 1.0]),
             ("Ich brauche Antworten", ["m:wendungsreich": -0.6, "m:leicht": 0.4])]),
         q("taschentuch", "Wie viele Taschentücher darf ein guter Film kosten?", [
@@ -247,7 +247,7 @@ enum TasteQuestions {
         q("absurd", "Ein Film, der sich selbst kein bisschen ernst nimmt?", [
             ("Je absurder, desto besser", ["m:schräg": 1.2, "m:lustig": 0.8]),
             ("Bitte mit Haltung", ["m:schräg": -0.8, "m:intensiv": 0.4])]),
-        q("abendgast", "Raumschiff, Drache oder Detektiv – wer bekommt deinen Abend?", [
+        q("abendgast", "Raumschiff, Drache oder Detektiv: Wer bekommt deinen Abend?", [
             ("Raumschiff", ["g:Science-Fiction": 1.4]),
             ("Drache", ["g:Fantasy": 1.4]),
             ("Detektiv", ["g:Krimi": 1.2, "g:Mystery": 0.8])]),
@@ -275,7 +275,7 @@ enum TasteQuestions {
         q("zusammenzucken", "Der ganze Kinosaal zuckt gleichzeitig zusammen. Dein Lieblingsmoment?", [
             ("Absolut", ["m:gruselig": 1.0, "m:spannend": 1.0]),
             ("Eher nicht", ["m:gruselig": -1.0])]),
-        q("wahregeschichte", "Nach einer wahren Geschichte – spannender als jede Fiktion?", [
+        q("wahregeschichte", "Nach einer wahren Geschichte: spannender als jede Fiktion?", [
             ("Oft ja", ["g:Biografie": 1.2, "g:Historie": 1.0, "g:Drama": 0.6]),
             ("Lieber erfunden", ["g:Fantasy": 0.6, "g:Biografie": -0.8])]),
         q("familienstreit", "Eine Familie, ein Haus, ein Wochenende voller Streit.", [
@@ -305,17 +305,17 @@ enum TasteQuestions {
         func certainty(_ q: TasteQuestion) -> Double {
             let k = q.keys
             let base = k.map { abs(profile.affinity[$0] ?? 0) }.reduce(0, +) / Double(max(k.count, 1))
-            // Personenfragen nicht gleich zu Beginn – erst ein Gefühl für Stimmungen bekommen.
+            // Personenfragen nicht gleich zu Beginn, erst ein Gefühl für Stimmungen bekommen.
             return q.id.hasPrefix("pd") || q.id.hasPrefix("pc") ? base + 0.6 : base
         }
         // Namen nur dosiert: höchstens eine Personenfrage pro sechs anderen Fragen, nie zweimal
-        // hintereinander, insgesamt höchstens vier – sonst wird der Chat zur Besetzungsliste.
+        // hintereinander, insgesamt höchstens vier, sonst wird der Chat zur Besetzungsliste.
         let peopleAsked = asked.filter { $0.hasPrefix("pd") || $0.hasPrefix("pc") }.count
         let othersAsked = asked.count - peopleAsked
         let lastWasPerson = lastAsked.map { $0.hasPrefix("pd") || $0.hasPrefix("pc") } ?? false
         let peopleAllowed = !lastWasPerson && peopleAsked < 4 && othersAsked >= 6 * (peopleAsked + 1)
         let candidates = all + (peopleAllowed ? peopleQuestions(asked: asked) : [])
-        // Offene Fragen verraten keine festen Merkmale – mittlere Priorität geben.
+        // Offene Fragen verraten keine festen Merkmale, mittlere Priorität geben.
         func priority(_ q: TasteQuestion) -> Double {
             if case .open = q.kind { return 0.5 }
             return certainty(q)
@@ -326,7 +326,7 @@ enum TasteQuestions {
         return ranked.prefix(6).first { $0.kind.family != lastKind } ?? ranked.first
     }
 
-    /// Zuletzt gestellte Frage – für die Abwechslung der Fragearten.
+    /// Zuletzt gestellte Frage, für die Abwechslung der Fragearten.
     static var lastAsked: String?
 
     /// Filme aus dem Katalog, die in einem Text genannt werden (deutscher oder Originaltitel).
@@ -343,7 +343,7 @@ enum TasteQuestions {
 
     // MARK: Regie & Schauspiel
 
-    /// Personen, die im Katalog mehrfach vorkommen – nach Häufigkeit.
+    /// Personen, die im Katalog mehrfach vorkommen, nach Häufigkeit.
     static let directors: [String] = ranked(FilmIndex.all.map(\.director))
     static let actors: [String] = ranked(FilmIndex.all.flatMap { $0.cast.prefix(3) })
 
@@ -407,7 +407,7 @@ extension TasteQuestions {
 
 /// Wenn die vorbereiteten Fragen durch sind: klare Entweder-oder-Fragen aus einer
 /// Alltagssituation und den zwei Stimmungen, über die das Profil am wenigsten weiß.
-/// Bewusst ohne freie KI-Generierung – das kleine Modell auf dem Gerät formuliert
+/// Bewusst ohne freie KI-Generierung, das kleine Modell auf dem Gerät formuliert
 /// solche Fragen oft unverständlich.
 enum SituationQuestions {
     private static let situations = [

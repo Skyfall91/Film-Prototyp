@@ -2,8 +2,7 @@ import Foundation
 import FoundationModels
 
 /// Ein Film, der nicht im Katalog ist, aber im Chat genannt wurde. Die Merkmale kommen aus
-/// Wikidata (Genre, Regie, Besetzung); Stimmungen werden aus den Genres abgeleitet und –
-/// wenn verfügbar – von Apple Intelligence ergänzt, aber nur aus unserer festen Liste.
+/// Wikidata (Genre, Regie, Besetzung); Stimmungen werden aus den Genres abgeleitet und, /// wenn verfügbar, von Apple Intelligence ergänzt, aber nur aus unserer festen Liste.
 struct ExternalFilm: Codable, Hashable, Sendable {
     var id: String          // "ext:Q27590871"
     var title: String
@@ -13,7 +12,7 @@ struct ExternalFilm: Codable, Hashable, Sendable {
     var director: String
     var cast: [String]
 
-    /// Gleiche Gewichtung wie bei Katalogfilmen – so lernt die Regression beide gleich.
+    /// Gleiche Gewichtung wie bei Katalogfilmen, so lernt die Regression beide gleich.
     var features: [(key: String, weight: Double)] {
         genres.map { ("g:\($0)", 1.0) }
         + moods.map { ("m:\($0)", 1.2) }
@@ -62,7 +61,7 @@ enum WikidataLookup {
         return ids
     }
 
-    /// Erster Treffer, der wirklich ein Film ist – mit Genres (deutsch), Regie und Besetzung.
+    /// Erster Treffer, der wirklich ein Film ist, mit Genres (deutsch), Regie und Besetzung.
     private static func details(ids: [String], title: String) async -> ExternalFilm? {
         let query = """
             SELECT ?item (YEAR(MIN(?date)) AS ?y) (GROUP_CONCAT(DISTINCT ?gLabel;separator="|") AS ?genres) \
@@ -90,7 +89,7 @@ enum WikidataLookup {
         }, uniquingKeysWith: { a, _ in a })
         guard let id = ids.first(where: { byID[$0] != nil }), let row = byID[id] else { return nil }
         let genres = mapGenres((row["genres"]?.value ?? "").split(separator: "|").map(String.init))
-        // Besetzung: bevorzugt Namen, die wir aus dem Katalog kennen – sonst die ersten.
+        // Besetzung: bevorzugt Namen, die wir aus dem Katalog kennen, sonst die ersten.
         let cast = (row["cast"]?.value ?? "").split(separator: "|").map(String.init)
         let known = Set(FilmIndex.all.flatMap(\.cast))
         let orderedCast = cast.filter { known.contains($0) } + cast.filter { !known.contains($0) }
@@ -99,7 +98,7 @@ enum WikidataLookup {
                             director: row["director"]?.value ?? "", cast: Array(orderedCast.prefix(3)))
     }
 
-    /// Mit einem zweiten Versuch – Wikidata drosselt bei vielen Anfragen kurz.
+    /// Mit einem zweiten Versuch, Wikidata drosselt bei vielen Anfragen kurz.
     private static func get(_ url: URL) async -> Data? {
         var request = URLRequest(url: url, timeoutInterval: 12)
         request.setValue(agent, forHTTPHeaderField: "User-Agent")
@@ -133,7 +132,7 @@ enum WikidataLookup {
         return out
     }
 
-    /// Grobe Stimmungen aus den Genres – Grundlage, falls Apple Intelligence nicht verfügbar ist.
+    /// Grobe Stimmungen aus den Genres, Grundlage, falls Apple Intelligence nicht verfügbar ist.
     static func moods(for genres: [String]) -> [String] {
         let map: [String: [String]] = [
             "Horror": ["gruselig", "düster"], "Komödie": ["lustig", "leicht"], "Animation": ["bunt", "familienfreundlich"],
@@ -150,11 +149,11 @@ enum WikidataLookup {
 
     @Generable
     struct MoodGuess {
-        @Guide(description: "2 bis 3 Stimmungen, die den Film am besten beschreiben – nur aus der vorgegebenen Liste")
+        @Guide(description: "2 bis 3 Stimmungen, die den Film am besten beschreiben, nur aus der vorgegebenen Liste")
         var moods: [String]
     }
 
-    /// Apple Intelligence schätzt die Stimmungen – nur Begriffe aus unserer Liste werden übernommen.
+    /// Apple Intelligence schätzt die Stimmungen, nur Begriffe aus unserer Liste werden übernommen.
     private static func withMoods(_ film: ExternalFilm) async -> ExternalFilm {
         guard MoodSearch.isAppleIntelligenceAvailable else { return film }
         let session = LanguageModelSession(instructions: """

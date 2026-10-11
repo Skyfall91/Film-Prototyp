@@ -10,7 +10,7 @@ enum Interaction: String, Codable, Sendable {
     case ratedDown, ratedOkay, ratedUp, ratedLove
 
     /// Wie stark das Signal ins Geschmacksprofil eingeht.
-    /// „Heute nicht“ ist schwächer als „mag ich nicht“, aber spürbar – sonst schlägt der
+    /// „Heute nicht“ ist schwächer als „mag ich nicht“, aber spürbar, sonst schlägt der
     /// Stapel nach einem Wisch immer wieder Ähnliches vor (Offline-Test: −0,5 statt −0,15).
     var signal: Double {
         switch self {
@@ -50,25 +50,28 @@ struct Profile: Codable, Identifiable, Hashable, Sendable {
     var name: String
     var colorIndex: Int
     var maxFSK: Int = 18
+    /// Profil für kleine Kinder (bis etwa 5): nur Animations- und Familientitel ab 0,
+    /// und die Eltern wählen die Lieblingsfilme, statt das Kind wischen zu lassen.
+    var littleKid = false
     /// Gelerntes Geschmacksprofil: Merkmal („g:Drama“, „m:düster“, „d:Regie“) → Gewicht.
     var affinity: [String: Double] = [:]
     var interactions: [String: Interaction] = [:]
     var watchlist: [String] = []
     var reviews: [Review] = []
     var importedCount = 0
-    /// Wie oft ein Merkmal schon in bewerteten Filmen vorkam – damit häufige Merkmale
+    /// Wie oft ein Merkmal schon in bewerteten Filmen vorkam, damit häufige Merkmale
     /// wie „Drama“ nicht allein durch ihre Menge dominieren.
     var exposure: [String: Double] = [:]
-    /// Summe und Anzahl der bisherigen Signale – für die Zentrierung („mehr als sonst“).
+    /// Summe und Anzahl der bisherigen Signale, für die Zentrierung („mehr als sonst“).
     var signalTotal = 0.0
     var signalN = 0
-    /// Bewertete Filme als Trainingsdaten (Film → Zielwert) – Grundlage der Ridge-Regression.
+    /// Bewertete Filme als Trainingsdaten (Film → Zielwert), Grundlage der Ridge-Regression.
     var samples: [Sample] = []
-    /// Direkte Hinweise aus dem Chat („mag Nolan“) – dienen der Regression als Vorwissen.
+    /// Direkte Hinweise aus dem Chat („mag Nolan“), dienen der Regression als Vorwissen.
     var hints: [String: Double] = [:]
     /// Daraus gelernte Gewichte je Merkmal (Cache, wird bei jedem Lernschritt neu berechnet).
     var weights: [String: Double] = [:]
-    /// Persönliche Geschmacksfaktoren – passend zu den Faktoren der Filme (Cache).
+    /// Persönliche Geschmacksfaktoren, passend zu den Faktoren der Filme (Cache).
     var taste: [Double] = []
     /// Im Chat genannte Filme, die nicht im Katalog sind (Merkmale aus Wikidata).
     var external: [String: ExternalFilm] = [:]
@@ -93,6 +96,7 @@ struct Profile: Codable, Identifiable, Hashable, Sendable {
         name = try c.decode(String.self, forKey: .name)
         colorIndex = try c.decode(Int.self, forKey: .colorIndex)
         maxFSK = try c.decodeIfPresent(Int.self, forKey: .maxFSK) ?? 18
+        littleKid = try c.decodeIfPresent(Bool.self, forKey: .littleKid) ?? false
         affinity = try c.decodeIfPresent([String: Double].self, forKey: .affinity) ?? [:]
         interactions = try c.decodeIfPresent([String: Interaction].self, forKey: .interactions) ?? [:]
         watchlist = try c.decodeIfPresent([String].self, forKey: .watchlist) ?? []
@@ -118,6 +122,16 @@ struct Profile: Codable, Identifiable, Hashable, Sendable {
     var avatarArt: AvatarArt? { avatar.flatMap(AvatarArt.byID) }
     var initial: String { String(name.prefix(1)).uppercased() }
     var isKid: Bool { maxFSK <= 12 }
+
+    /// „Kleine Kinder“, „Kinderprofil · bis FSK 6“ oder „Erwachsenenprofil“.
+    var ageLabel: String {
+        littleKid ? "Kleine Kinder · bis 5 Jahre" : isKid || maxFSK < 18 ? "Kinderprofil · bis FSK \(maxFSK)" : "Erwachsenenprofil"
+    }
+
+    /// Darf dieses Profil den Titel sehen?
+    func allows(_ film: Film) -> Bool {
+        film.fsk <= maxFSK && (!littleKid || film.forLittleKids)
+    }
 
     static let palette: [Color] = [
         Color(red: 1.0, green: 0.42, blue: 0.24),  // Orange
@@ -157,7 +171,7 @@ struct Profile: Codable, Identifiable, Hashable, Sendable {
         refit()
     }
 
-    /// Ein Film außerhalb des Katalogs – wird wie ein bewerteter Katalogfilm gelernt.
+    /// Ein Film außerhalb des Katalogs, wird wie ein bewerteter Katalogfilm gelernt.
     mutating func learn(external film: ExternalFilm, _ interaction: Interaction) {
         external[film.id] = film
         for (key, weight) in film.features { affinity[key, default: 0] += interaction.signal * weight }
@@ -174,7 +188,7 @@ struct Profile: Codable, Identifiable, Hashable, Sendable {
         taste = TasteModel.foldIn(samples: samples)
     }
 
-    /// Anzahl echter Geschmackssignale – Grundlage für „Wie gut kennen wir dich?“.
+    /// Anzahl echter Geschmackssignale, Grundlage für „Wie gut kennen wir dich?“.
     var signalCount: Int {
         interactions.values.filter { $0.signal != 0 && $0 != .notToday }.count + importedCount
     }

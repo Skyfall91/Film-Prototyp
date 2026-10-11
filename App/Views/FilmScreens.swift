@@ -231,7 +231,7 @@ struct FilmDetailView: View {
         return store.nextEpisode(of: film) == nil ? "Ansehen" : "Weiterschauen"
     }
 
-    /// „Staffel 1 · Folge 4 · Lügen“ – damit klar ist, was startet.
+    /// „Staffel 1 · Folge 4 · Lügen“, damit klar ist, was startet.
     private var playSubtitle: String? {
         guard let ref = store.upNext(film) else { return nil }
         let title = film.episode(ref).map { " · \($0.title)" } ?? ""
@@ -329,7 +329,7 @@ struct FlowChips: View {
 }
 
 extension Color {
-    /// Akzentfarbe: Weiß wie in den Apple-Apps – Farbe kommt nur aus den Postern.
+    /// Akzentfarbe: Weiß wie in den Apple-Apps, Farbe kommt nur aus den Postern.
     static let highlight = Color.white
 }
 
@@ -401,7 +401,7 @@ struct RatingSheet: View {
                                 }
                             }
                             if writing == profile.id {
-                                TextField("Was hat dir gefallen – oder nicht?", text: Binding(
+                                TextField("Was hat dir gefallen, oder nicht?", text: Binding(
                                     get: { reviews[profile.id] ?? "" }, set: { reviews[profile.id] = $0 }), axis: .vertical)
                                     .lineLimit(3...6)
                                     .padding(12)

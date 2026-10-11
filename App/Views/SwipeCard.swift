@@ -13,7 +13,7 @@ struct SwipeOption {
 }
 
 /// Stapel aus bis zu drei Karten. Jede Karte behält ihre Identität, während sie nach
-/// vorne rückt – dadurch animiert der Stapel flüssig statt Views neu zu erzeugen.
+/// vorne rückt, dadurch animiert der Stapel flüssig statt Views neu zu erzeugen.
 /// Beim Loslassen wird der Swipe sofort gemeldet: Die nächste Karte rückt nach und der
 /// Hintergrund wechselt, *während* die alte Karte noch wegfliegt.
 struct SwipeDeck<Item: Identifiable, Card: View>: View {
@@ -25,7 +25,7 @@ struct SwipeDeck<Item: Identifiable, Card: View>: View {
     @ViewBuilder let card: (Item, _ isTop: Bool) -> Card
 
     @State private var progress: CGFloat = 0
-    /// Karten, die gerade wegfliegen – sie sind schon aus `items` raus, bleiben aber sichtbar.
+    /// Karten, die gerade wegfliegen, sie sind schon aus `items` raus, bleiben aber sichtbar.
     @State private var departing: [Item] = []
 
     private struct Entry: Identifiable {
@@ -141,7 +141,7 @@ struct SwipeCard<Content: View>: View {
         return min(along / threshold, 1) * dominance
     }
 
-    /// Wie weit die nächste Karte schon nachrückt – stufenlos über alle Richtungen mit
+    /// Wie weit die nächste Karte schon nachrückt, stufenlos über alle Richtungen mit
     /// Abflug. „Details“ (nach oben) zählt nicht, die Karte bleibt dort ja liegen.
     private var lift: CGFloat {
         let total = SwipeDirection.allCases
@@ -224,8 +224,7 @@ struct SwipeCard<Content: View>: View {
             }
     }
 
-    /// Vertikale Richtungen ohne Abflug („Details“) bekommen Gummiband-Widerstand –
-    /// nur vertikal. Seitwärts bleibt die Karte frei beweglich.
+    /// Vertikale Richtungen ohne Abflug („Details“) bekommen Gummiband-Widerstand, /// nur vertikal. Seitwärts bleibt die Karte frei beweglich.
     private func resisted(_ t: CGSize) -> CGSize {
         let d: SwipeDirection = t.height < 0 ? .up : .down
         guard t.height != 0, options[d]?.flyOut == false else { return t }
@@ -242,8 +241,7 @@ struct SwipeCard<Content: View>: View {
             return
         }
         flying = true
-        // Gerade Linie: die Karte fliegt weiter in die Richtung, in die sie schon zeigt –
-        // man sieht vorher, wo sie landet. Ohne Ziehweg (Buttons) geht es entlang der Achse.
+        // Gerade Linie: die Karte fliegt weiter in die Richtung, in die sie schon zeigt, // man sieht vorher, wo sie landet. Ohne Ziehweg (Buttons) geht es entlang der Achse.
         let axis: CGVector = switch direction {
         case .left: CGVector(dx: -1, dy: 0)
         case .right: CGVector(dx: 1, dy: 0)
@@ -267,7 +265,7 @@ struct SwipeCard<Content: View>: View {
     private static var settle: Animation { .spring(duration: 0.35, bounce: 0.1) }
 }
 
-/// Kleine Legende unter der Karte – erklärt die vier Richtungen.
+/// Kleine Legende unter der Karte, erklärt die vier Richtungen.
 struct SwipeLegend: View {
     let options: [SwipeDirection: SwipeOption]
     var body: some View {

@@ -28,7 +28,7 @@ extension View {
     }
 }
 
-/// Abspielen braucht ein aktives Abo – Trailer nicht. Ohne Abo erscheint statt des Players die Tarifwahl.
+/// Abspielen braucht ein aktives Abo, Trailer nicht. Ohne Abo erscheint statt des Players die Tarifwahl.
 private struct PlayerGate: View {
     @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
@@ -62,8 +62,7 @@ struct PlayerScreen: View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            // Platzhalter: das Poster füllt den Screen, solange der Stream lädt –
-            // so wirkt der Zoom aus der Karte nahtlos.
+            // Platzhalter: das Poster füllt den Screen, solange der Stream lädt, // so wirkt der Zoom aus der Karte nahtlos.
             if !showVideo {
                 ZStack {
                     if let image = request.film.posterImage {
@@ -96,7 +95,7 @@ struct PlayerScreen: View {
                 SystemPlayer(player: player)
                     .ignoresSafeArea()
                     .opacity(showVideo ? 1 : 0)
-                // Unterdrückt das System-Lautstärke-Popup – der Player zeigt seine eigene Anzeige.
+                // Unterdrückt das System-Lautstärke-Popup, der Player zeigt seine eigene Anzeige.
                 SystemVolumeHUDSuppressor()
                     .frame(width: 1, height: 1)
                     .opacity(0.01)
@@ -135,7 +134,7 @@ struct PlayerScreen: View {
             if request.countsAsWatched {
                 let before = store.pendingRatings.count
                 store.play(request.film, episode: request.episode)
-                // Erst drehen, dann bewerten – ein Sheet mitten in der Drehung hält sonst das Querformat fest.
+                // Erst drehen, dann bewerten, ein Sheet mitten in der Drehung hält sonst das Querformat fest.
                 // Serien werden nur nach der ersten Folge bewertet.
                 let pending = store.pendingRatings.count > before || !request.film.isSeries ? store.pendingRatings.last : nil
                 Task { @MainActor in
@@ -177,8 +176,7 @@ struct PlayerScreen: View {
             self.player = player
             player.play()
             withAnimation(.smooth(duration: 0.5)) { showVideo = true }
-            // Wie bei Netflix: nach dem Aufzoomen ins Querformat drehen –
-            // aber nicht mehr, wenn der Player in der Zwischenzeit geschlossen wurde.
+            // Wie bei Netflix: nach dem Aufzoomen ins Querformat drehen, // aber nicht mehr, wenn der Player in der Zwischenzeit geschlossen wurde.
             try? await Task.sleep(for: .milliseconds(250))
             guard !closed, !Task.isCancelled else { return }
             AppDelegate.allowLandscape = true
@@ -238,7 +236,7 @@ enum TrailerLoader {
     static func playerItem(for request: PlaybackRequest) async throws -> AVPlayerItem {
         let youtube = YouTube(videoID: request.videoID, methods: [.local, .remote])
 
-        // 1. HLS: das Format, für das AVPlayer gebaut ist – adaptive Qualität, sauberes Puffern.
+        // 1. HLS: das Format, für das AVPlayer gebaut ist, adaptive Qualität, sauberes Puffern.
         if let hls = try? await youtube.livestreams.first(where: { $0.streamType == .hls }) {
             let item = AVPlayerItem(url: hls.url)
             item.preferredForwardBufferDuration = 8

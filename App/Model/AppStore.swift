@@ -60,7 +60,7 @@ enum AuthError: LocalizedError {
 final class AppStore {
     var profiles: [Profile] = []
     var activeProfileIDs: [UUID] = []
-    /// Konto des Haushalts (Registrierung/Login) – getrennt von den Profilen, die es enthält.
+    /// Konto des Haushalts (Registrierung/Login), getrennt von den Profilen, die es enthält.
     var account: Account?
     var signedIn = false
     let purchases = PurchaseService()
@@ -68,7 +68,7 @@ final class AppStore {
     var pendingRatings: [PendingRating] = []
     /// Bewertung, die als Sheet angezeigt werden soll (nach dem Schauen).
     var ratingToPresent: PendingRating?
-    /// Zählt Swipes auf der Startseite – die Gesten-Legende verschwindet nach ein paar Swipes.
+    /// Zählt Swipes auf der Startseite, die Gesten-Legende verschwindet nach ein paar Swipes.
     var homeSwipeCount = UserDefaults.standard.integer(forKey: "homeSwipeCount") {
         didSet { UserDefaults.standard.set(homeSwipeCount, forKey: "homeSwipeCount") }
     }
@@ -105,7 +105,7 @@ final class AppStore {
     }
 
     /// Prüft E-Mail und Passwort gegen das Konto auf diesem Gerät.
-    /// Ein echter Dienst würde das auf einem Server tun – damit klappt es dann auf jedem Gerät.
+    /// Ein echter Dienst würde das auf einem Server tun, damit klappt es dann auf jedem Gerät.
     func signIn(email: String, password: String) throws {
         let mail = email.trimmingCharacters(in: .whitespaces).lowercased()
         guard let account else { throw AuthError.noAccount }
@@ -163,7 +163,7 @@ final class AppStore {
         if let k = UserDefaults.standard.string(forKey: "kind").flatMap(KindFilter.init) { kindFilter = k }
     }
 
-    /// Startparameter `-seedDemo`: ein fertiges Profil – für Pitch-Demos und Screenshots.
+    /// Startparameter `-seedDemo`: ein fertiges Profil, für Pitch-Demos und Screenshots.
     func seedDemo() {
         resetAll()
         var demo = Profile(name: "Demo", colorIndex: 1, avatar: "scifi-0")
@@ -247,7 +247,7 @@ final class AppStore {
                 }
             }
             record(film, .played)
-            // Bewertet wird die Serie einmal, nach der ersten Folge – nicht jede Folge.
+            // Bewertet wird die Serie einmal, nach der ersten Folge, nicht jede Folge.
             if firstTime { pendingRatings.append(PendingRating(filmID: film.id, profileIDs: activeProfileIDs, date: .now)) }
             save()
             return
@@ -305,7 +305,7 @@ final class AppStore {
         return nextEpisode(of: film) == nil ? "Ansehen · \(ref.short)" : "Weiterschauen · \(ref.short)"
     }
 
-    /// Angefangene Serien der aktiven Profile – für „Weiterschauen“.
+    /// Angefangene Serien der aktiven Profile, für „Weiterschauen“.
     var continueWatching: [(film: Film, next: EpisodeRef)] {
         var seen = Set<String>()
         return activeProfiles.flatMap { p in p.progress.map { ($0.key, $0.value) } }
@@ -340,12 +340,25 @@ final class AppStore {
     }
 
     @discardableResult
-    func addProfile(name: String, colorIndex: Int, maxFSK: Int = 18, avatar: String? = nil) -> UUID {
-        let p = Profile(name: name, colorIndex: colorIndex, maxFSK: maxFSK, avatar: avatar)
+    func addProfile(name: String, colorIndex: Int, maxFSK: Int = 18, littleKid: Bool = false, avatar: String? = nil) -> UUID {
+        var p = Profile(name: name, colorIndex: colorIndex, maxFSK: maxFSK, avatar: avatar)
+        p.littleKid = littleKid
         profiles.append(p)
         save()
         return p.id
     }
+
+    /// Name, Bild und Altersstufe ändern, der gelernte Geschmack bleibt.
+    func editProfile(_ id: UUID, name: String, avatar: AvatarArt, maxFSK: Int, littleKid: Bool) {
+        update(id) {
+            $0.name = name; $0.avatar = avatar.id; $0.colorIndex = avatar.colorIndex
+            $0.maxFSK = maxFSK; $0.littleKid = littleKid
+        }
+        save()
+    }
+
+    /// Das letzte Profil bleibt, ohne Profil gäbe es niemanden, für den die App vorschlägt.
+    var canDeleteProfile: Bool { profiles.count > 1 }
 
     func deleteProfile(_ id: UUID) {
         profiles.removeAll { $0.id == id }
@@ -408,7 +421,7 @@ final class AppStore {
         pendingRatings = snap.pendingRatings
         account = snap.account
         signedIn = snap.signedIn ?? false
-        // Beim Start wählt man wie bei Netflix, wer schaut – außer es gibt nur ein Profil.
+        // Beim Start wählt man wie bei Netflix, wer schaut, außer es gibt nur ein Profil.
         hasChosenViewers = profiles.count <= 1
     }
 }

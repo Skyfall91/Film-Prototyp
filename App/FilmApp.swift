@@ -16,7 +16,7 @@ struct FilmApp: App {
     }
 }
 
-/// Die App ist im Hochformat gebaut – nur der Player darf ins Querformat drehen.
+/// Die App ist im Hochformat gebaut, nur der Player darf ins Querformat drehen.
 final class AppDelegate: NSObject, UIApplicationDelegate {
     static var allowLandscape = false
 
@@ -87,7 +87,7 @@ struct MainTabs: View {
     }
 }
 
-/// Startparameter `-screen <name>` öffnet direkt einen Screen – für Folien-Screenshots.
+/// Startparameter `-screen <name>` öffnet direkt einen Screen, für Folien-Screenshots.
 enum DemoScreen {
     static let current = UserDefaults.standard.string(forKey: "screen")
 }

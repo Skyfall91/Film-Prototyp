@@ -2,7 +2,7 @@ import SwiftUI
 
 // MARK: - Avatare
 
-/// Profilbilder nach Genres sortiert – wie die Avatar-Reihen bei Netflix, nur ohne fremde Figuren.
+/// Profilbilder nach Genres sortiert, wie die Avatar-Reihen bei Netflix, nur ohne fremde Figuren.
 struct AvatarArt: Identifiable, Hashable {
     let id: String
     let emoji: String
@@ -64,14 +64,34 @@ struct AvatarTile: View {
 /// Name darunter, Kinderprofil als eigene Karte.
 struct ProfileEditor: View {
     var isFirst: Bool
-    var next: (_ name: String, _ avatar: AvatarArt, _ maxFSK: Int) -> Void
+    /// Vorhandenes Profil bearbeiten statt ein neues anlegen.
+    var editing: Profile? = nil
+    /// Abbrechen-Knopf oben links (nur, wo man auch zurück kann).
+    var cancel: (() -> Void)? = nil
+    /// Löschen-Knopf unten (nur beim Bearbeiten).
+    var delete: (() -> Void)? = nil
+    var next: (_ name: String, _ avatar: AvatarArt, _ maxFSK: Int, _ littleKid: Bool) -> Void
 
     @State private var name = ""
     @State private var art = AvatarArt.all.randomElement()!
     @State private var kid = false
     @State private var fsk = 6
+    @State private var little = false
     @State private var picking = false
+    @State private var confirmDelete = false
     @FocusState private var focused: Bool
+
+    init(isFirst: Bool, editing: Profile? = nil, cancel: (() -> Void)? = nil, delete: (() -> Void)? = nil,
+         next: @escaping (_ name: String, _ avatar: AvatarArt, _ maxFSK: Int, _ littleKid: Bool) -> Void) {
+        self.isFirst = isFirst; self.editing = editing; self.cancel = cancel; self.delete = delete; self.next = next
+        if let p = editing {
+            _name = State(initialValue: p.name)
+            _art = State(initialValue: p.avatarArt ?? AvatarArt.all[p.colorIndex % AvatarArt.all.count])
+            _kid = State(initialValue: p.maxFSK < 18)
+            _fsk = State(initialValue: p.maxFSK < 18 ? p.maxFSK : 6)
+            _little = State(initialValue: p.littleKid)
+        }
+    }
 
     private var quickPicks: [AvatarArt] {
         // Eine Figur je Genre, die gewählte immer vorne dabei.
@@ -86,7 +106,7 @@ struct ProfileEditor: View {
             ScrollView {
                 VStack(spacing: 26) {
                     VStack(spacing: 6) {
-                        Text(isFirst ? "Dein Profil" : "Neues Profil")
+                        Text(editing != nil ? "Profil bearbeiten" : isFirst ? "Dein Profil" : "Neues Profil")
                             .font(.largeTitle.weight(.heavy))
                         Text("Jedes Profil lernt seinen eigenen Geschmack.")
                             .font(.subheadline).foregroundStyle(.secondary)
@@ -122,14 +142,35 @@ struct ProfileEditor: View {
                         .padding(.horizontal, 24)
 
                     kidCard.padding(.horizontal, 20)
+
+                    if let delete {
+                        Button("Profil löschen", systemImage: "trash", role: .destructive) { confirmDelete = true }
+                            .font(.headline)
+                            .confirmationDialog("„\(editing?.name ?? name)“ löschen?", isPresented: $confirmDelete, titleVisibility: .visible) {
+                                Button("Profil löschen", role: .destructive, action: delete)
+                            } message: {
+                                Text("Merkliste, Bewertungen und der gelernte Geschmack dieses Profils gehen verloren.")
+                            }
+                    }
                 }
                 .padding(.bottom, 24)
             }
             .scrollDismissesKeyboard(.interactively)
         }
+        .overlay(alignment: .topLeading) {
+            if let cancel {
+                Button(action: cancel) {
+                    Image(systemName: "xmark").font(.headline).frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .glassEffect(.regular.interactive(), in: .circle)
+                .accessibilityLabel("Abbrechen")
+                .padding(.leading, 20).padding(.top, 8)
+            }
+        }
         .safeAreaInset(edge: .bottom) {
             Button(action: submit) {
-                Text("Weiter").font(.headline).frame(maxWidth: .infinity).padding(.vertical, 6)
+                Text(editing != nil ? "Sichern" : "Weiter").font(.headline).frame(maxWidth: .infinity).padding(.vertical, 6)
             }
             .buttonStyle(.glassProminent)
             .foregroundStyle(.black)
@@ -186,19 +227,29 @@ struct ProfileEditor: View {
             }
             .tint(.green)
             if kid {
+                // „Bis 5“ ist FSK 0 plus nur Kinder- und Familientitel.
                 HStack(spacing: 8) {
-                    ForEach([0, 6, 12, 16], id: \.self) { value in
-                        Button { withAnimation(.snappy) { fsk = value } } label: {
-                            Text("FSK \(value)")
+                    ForEach([(-1, "Bis 5 J."), (6, "FSK 6"), (12, "FSK 12"), (16, "FSK 16")], id: \.0) { value, label in
+                        let on = value == -1 ? little : (!little && fsk == value)
+                        Button {
+                            withAnimation(.snappy) {
+                                little = value == -1
+                                fsk = max(value, 0)
+                            }
+                        } label: {
+                            Text(label)
                                 .font(.subheadline.weight(.semibold))
+                                .lineLimit(1).minimumScaleFactor(0.8)
                                 .frame(maxWidth: .infinity, minHeight: 38)
-                                .foregroundStyle(fsk == value ? .black : .white)
-                                .background(fsk == value ? AnyShapeStyle(.white) : AnyShapeStyle(.white.opacity(0.08)), in: .capsule)
+                                .foregroundStyle(on ? .black : .white)
+                                .background(on ? AnyShapeStyle(.white) : AnyShapeStyle(.white.opacity(0.08)), in: .capsule)
                         }
                         .buttonStyle(.plain)
                     }
                 }
-                Text("Vorschläge, Suche und Katalog zeigen nur Titel bis FSK \(fsk) – auch wenn das Profil mit anderen zusammen schaut.")
+                Text(little
+                     ? "Nur Zeichentrick- und Familientitel ohne Altersgrenze. Statt zu wischen, suchst du gleich die Lieblingsfilme deines Kindes aus."
+                     : "Vorschläge, Suche und Katalog zeigen nur Titel bis FSK \(fsk), auch wenn das Profil mit anderen zusammen schaut.")
                     .font(.footnote).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -209,16 +260,107 @@ struct ProfileEditor: View {
 
     private func submit() {
         guard !trimmed.isEmpty else { return }
-        // Erst die Tastatur wegnehmen, dann weiter – sonst springt der nächste Schritt.
+        // Erst die Tastatur wegnehmen, dann weiter, sonst springt der nächste Schritt.
         focused = false
         Task {
             try? await Task.sleep(for: .milliseconds(320))
-            next(trimmed, art, kid ? fsk : 18)
+            next(trimmed, art, kid ? fsk : 18, kid && little)
         }
     }
 }
 
-/// Alle Profilbilder, nach Genre in Reihen – die Galerie, aus der man sich „seine Figur“ aussucht.
+// MARK: - Profile verwalten
+
+/// Alle Profile des Haushalts: umbenennen, Bild und Altersstufe ändern, löschen.
+/// Hier liegt auch der Import von Letterboxd und IMDb, bewusst nicht im Onboarding.
+struct ManageProfilesView: View {
+    @Environment(AppStore.self) private var store
+    @State private var editing: UUID?
+    @State private var adding = false
+    @State private var importing: UUID?
+    @State private var confirmDelete: Profile?
+
+    /// Importieren ergibt nur bei Erwachsenen Sinn, Kinder haben kein Letterboxd.
+    private var importable: [Profile] { store.profiles.filter { !$0.isKid } }
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(store.profiles) { profile in
+                    Button { editing = profile.id } label: {
+                        HStack(spacing: 14) {
+                            AvatarView(profile: profile, size: 44)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(profile.name).font(.headline)
+                                Text(profile.ageLabel).font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "pencil").foregroundStyle(.secondary)
+                        }
+                        .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .swipeActions {
+                        if store.canDeleteProfile {
+                            Button("Löschen", systemImage: "trash", role: .destructive) { confirmDelete = profile }
+                        }
+                    }
+                }
+                Button("Profil hinzufügen", systemImage: "person.badge.plus") { adding = true }
+            } footer: {
+                Text(store.canDeleteProfile ? "Zum Löschen nach links wischen oder das Profil öffnen." : "Das letzte Profil kann nicht gelöscht werden.")
+            }
+
+            if !importable.isEmpty {
+                Section {
+                    if importable.count == 1, let only = importable.first {
+                        Button("Von Letterboxd oder IMDb importieren", systemImage: "square.and.arrow.down") { importing = only.id }
+                    } else {
+                        Menu {
+                            ForEach(importable) { p in Button(p.name) { importing = p.id } }
+                        } label: {
+                            Label("Von Letterboxd oder IMDb importieren", systemImage: "square.and.arrow.down")
+                        }
+                    }
+                } header: {
+                    Text("Bewertungen mitbringen")
+                } footer: {
+                    Text("Wer schon Filme bewertet hat, kann den Daten-Export (ratings.csv) laden. Die Vorschläge werden dadurch genauer.")
+                }
+            }
+        }
+        .navigationTitle("Profile")
+        .navigationBarTitleDisplayMode(.inline)
+        .fullScreenCover(item: Binding(get: { editing.map(IdentifiedUUID.init) }, set: { editing = $0?.id })) { item in
+            if let profile = store.profiles.first(where: { $0.id == item.id }) {
+                ProfileEditor(isFirst: false, editing: profile, cancel: { editing = nil },
+                              delete: store.canDeleteProfile ? { store.deleteProfile(profile.id); editing = nil } : nil) { name, art, fsk, little in
+                    store.editProfile(profile.id, name: name, avatar: art, maxFSK: fsk, littleKid: little)
+                    editing = nil
+                }
+                .preferredColorScheme(.dark)
+            }
+        }
+        .fullScreenCover(isPresented: $adding) {
+            OnboardingFlow(mode: .addProfile, cancel: { adding = false }) { _ in adding = false }
+        }
+        .sheet(item: Binding(get: { importing.map(IdentifiedUUID.init) }, set: { importing = $0?.id })) { item in
+            ImportStep(profileID: item.id) { importing = nil }
+                .preferredColorScheme(.dark)
+        }
+        .confirmationDialog("„\(confirmDelete?.name ?? "")“ löschen?", isPresented: Binding(get: { confirmDelete != nil }, set: { if !$0 { confirmDelete = nil } }),
+                            titleVisibility: .visible) {
+            Button("Profil löschen", role: .destructive) {
+                if let p = confirmDelete { withAnimation { store.deleteProfile(p.id) } }
+                confirmDelete = nil
+            }
+        } message: {
+            Text("Merkliste, Bewertungen und der gelernte Geschmack dieses Profils gehen verloren.")
+        }
+    }
+}
+
+/// Alle Profilbilder, nach Genre in Reihen, die Galerie, aus der man sich „seine Figur“ aussucht.
 struct AvatarPicker: View {
     @Binding var selection: AvatarArt
     @Environment(\.dismiss) private var dismiss

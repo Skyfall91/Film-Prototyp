@@ -1,14 +1,14 @@
 import SwiftUI
 
-/// Akzentfarbe der App. Sie steht nur für Hauptaktion, Auswahl und Zustand – Farbe im Bild
+/// Akzentfarbe der App. Sie steht nur für Hauptaktion, Auswahl und Zustand, Farbe im Bild
 /// kommt sonst aus den Postern. Varianten für die Farbsuche: Startparameter `-palette <name>`.
 enum Theme {
     enum Palette: String, CaseIterable {
         /// Kinolicht: warmes Gold wie der Projektorstrahl im dunklen Saal.
         case honig
-        /// Frisches Mint – verspielt, wie die neueren Apple-Apps.
+        /// Frisches Mint, verspielt, wie die neueren Apple-Apps.
         case minze
-        /// Kinokarten-Rosa – laut und fröhlich.
+        /// Kinokarten-Rosa, laut und fröhlich.
         case rosa
         /// Jedes Profil bringt seine eigene Farbe mit.
         case profil
