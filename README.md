@@ -1,7 +1,5 @@
 <div align="center">
 
-<img src="Screenshots/app/04-geschmack.png" width="220" alt="Die App: dein Geschmacksprofil">
-
 # 🎬 Film-App ausprobieren
 
 **Ein Film statt tausend Kacheln.** So bekommst du die App auf deinen Mac oder dein iPhone.<br>
@@ -255,16 +253,17 @@ SwiftUI, iOS 26, Xcode 26 oder neuer. Signiert wird mit dem Personal Team, daher
 
 ### Demo- und Screenshot-Modus
 
-```bash
-./shot.sh out.png                                   # Demo-Profil, Startseite
-./shot.sh out.png -pendingRating YES                # mit Bewertungs-Banner
-./shot.sh out.png -screen calibrate|reveal|detail|rating|player|editor|plan|who|account|register|login
-./shot.sh out.png -screen detail -detailID serie-dark     # bestimmter Titel
-./shot.sh out.png -kind series                            # Startseite nur Serien
-./shot.sh out.png -palette honig|minze|rosa|profil        # Farbvarianten (Standard: profil)
-./shot.sh out.png -startTab 4 -moodQuery "Düster und spannend"
-```
+Startparameter für Demos und Folien-Screenshots (in Xcode unter *Scheme → Run → Arguments*):
 
-Startparameter in Xcode: *Scheme → Run → Arguments* (z. B. `-seedDemo YES`).
+| Parameter | Wirkung |
+|---|---|
+| `-seedDemo YES` | fertiges Demo-Profil, Startseite |
+| `-pendingRating YES` | mit Bewertungs-Banner |
+| `-screen calibrate` (oder `reveal`, `detail`, `rating`, `player`, `editor`, `plan`, `who`, `account`, `register`, `login`) | öffnet direkt diesen Screen |
+| `-detailID serie-dark` | bestimmter Titel in der Detailansicht |
+| `-kind series` | Startseite nur Serien |
+| `-palette honig` (oder `minze`, `rosa`, `profil`) | Farbvarianten, Standard ist `profil` |
+| `-startTab 4 -moodQuery "Düster und spannend"` | Suche mit Beispieltext |
+
 
 > Hinweis: Das Auflösen von YouTube-Streams (YouTubeKit) ist nur für diesen Studien-Prototyp gedacht. Ein echtes Produkt würde lizenzierte Videodateien von einem eigenen CDN streamen.
