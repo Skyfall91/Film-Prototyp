@@ -387,13 +387,6 @@ struct RecommendationCard: View {
                 .lineLimit(compact ? 2 : 3)
                 .fixedSize(horizontal: false, vertical: true)
 
-            if !rec.reason.isEmpty {
-                Label(rec.reason, systemImage: "sparkles")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.tint)
-                    .lineLimit(1)
-                    .padding(.top, 2)
-            }
         }
         .foregroundStyle(.white)
         .frame(maxWidth: .infinity, alignment: .leading)

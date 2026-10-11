@@ -58,12 +58,16 @@ struct Film: Codable, Identifiable, Hashable, Sendable {
     }
 
     /// Ein Satz, der neugierig macht: der erste Satz der handgeschriebenen, spoilerfreien Beschreibung.
+    /// Genau ein Satz für die Vorschlagskarte: der erste Satz der Beschreibung.
+    /// Abkürzungen („Dr.“, „P. T.“) beenden keinen Satz.
     var hook: String {
         let s = synopsis.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let end = s.firstRange(of: /[.!?](\s|$)/) else { return s }
-        let first = String(s[..<end.lowerBound]) + String(s[end.lowerBound])
-        // Sehr kurze Anfänge („Dr.“, „Teil 2.“) tragen allein nicht, dann die ganze Beschreibung.
-        return first.count < 30 ? s : first
+        let abbreviations: Set<String> = ["dr", "mr", "mrs", "ms", "st", "nr", "jr", "sr", "prof", "ca", "vs", "bzw"]
+        for end in s.matches(of: /(\S+)[.!?](?=\s|$)/) {
+            let word = end.output.1.lowercased()
+            if word.count > 1 && !abbreviations.contains(word) { return String(s[..<end.range.upperBound]) }
+        }
+        return s
     }
 
     var runtimeText: String {
