@@ -14,6 +14,7 @@
 		258F0D15CEAB2B80355A71AA /* BrowseScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = C841F7527207E15DF9552F04 /* BrowseScreens.swift */; };
 		25E69313DC9BF34C8DC73635 /* NativePlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42F2BB045C83199A83AD16FA /* NativePlayer.swift */; };
 		271FC4228544D6D5CCB9E384 /* AccountScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = F491B2823E5B075BADA678DC /* AccountScreens.swift */; };
+		27BE670FD0003888CB30CEE7 /* CloudAccounts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DF82A170599653BD151F3C4 /* CloudAccounts.swift */; };
 		452D77B0571EFECC93375590 /* FilmApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B491671735E9C7126F2F46D6 /* FilmApp.swift */; };
 		4827138C8D9D18D912C5AEC0 /* TasteQuestions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44DD3AE695694D798866E3A3 /* TasteQuestions.swift */; };
 		50B44B855D89BCD2C8B991BA /* TasteChat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 086224977C10C38A172C2161 /* TasteChat.swift */; };
@@ -53,6 +54,7 @@
 		750BA9623B0543813A979AED /* LibraryImport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryImport.swift; sourceTree = "<group>"; };
 		7AD7920BB8BBA2D8FDEC1E92 /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
 		996D61BE7659D9E817D5EB9C /* Film.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Film.swift; sourceTree = "<group>"; };
+		9DF82A170599653BD151F3C4 /* CloudAccounts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudAccounts.swift; sourceTree = "<group>"; };
 		B491671735E9C7126F2F46D6 /* FilmApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilmApp.swift; sourceTree = "<group>"; };
 		C841F7527207E15DF9552F04 /* BrowseScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowseScreens.swift; sourceTree = "<group>"; };
 		C847389F908BB1725E55060D /* MoodSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoodSearch.swift; sourceTree = "<group>"; };
@@ -146,6 +148,7 @@
 				532519A0E02F81CB1280E44B /* Account.swift */,
 				5E0D4441BD9DC3BBCCD828EF /* AccountDatabase.swift */,
 				10C8467BFFFAC4DBCA1A7C39 /* AppStore.swift */,
+				9DF82A170599653BD151F3C4 /* CloudAccounts.swift */,
 				996D61BE7659D9E817D5EB9C /* Film.swift */,
 				EF2ACF95E76957F4C1982890 /* Profile.swift */,
 				E49063D86A0729ACA487AF74 /* Theme.swift */,
@@ -234,6 +237,7 @@
 				271FC4228544D6D5CCB9E384 /* AccountScreens.swift in Sources */,
 				C56098D6742BE7C42AD76042 /* AppStore.swift in Sources */,
 				258F0D15CEAB2B80355A71AA /* BrowseScreens.swift in Sources */,
+				27BE670FD0003888CB30CEE7 /* CloudAccounts.swift in Sources */,
 				00C77E7C0003A1B129A527A9 /* Components.swift in Sources */,
 				CA6E0B8D36CA9B4144CA4EDE /* ExternalFilms.swift in Sources */,
 				EDBD2C9B4D15ED5C4537EE37 /* Film.swift in Sources */,

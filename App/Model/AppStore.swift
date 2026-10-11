@@ -38,10 +38,14 @@ enum SwipeAction: CaseIterable {
 }
 
 enum AuthError: LocalizedError {
-    case invalidEmail, weakPassword, noAccount, unknownEmail, wrongPassword, emailTaken
+    case invalidEmail, weakPassword, noAccount, unknownEmail, wrongPassword, emailTaken, wrongCredentials, offline
+    case server(String)
 
     var errorDescription: String? {
         switch self {
+        case .wrongCredentials: "E-Mail oder Passwort stimmt nicht."
+        case .offline: "Keine Verbindung zum Server. Ohne Netz geht nur ein Konto, das auf diesem Gerät schon angemeldet war."
+        case .server(let message): "Der Server meldet: \(message)"
         case .emailTaken: "Zu dieser E-Mail gibt es schon ein Konto. Melde dich damit an."
         case .invalidEmail: "Das sieht nicht nach einer E-Mail-Adresse aus."
         case .weakPassword: "Das Passwort braucht mindestens 8 Zeichen und eine Zahl."
@@ -96,13 +100,21 @@ final class AppStore {
     var profileLimit: Int { subscription?.plan.maxProfiles ?? Plan.familie.maxProfiles }
     var canAddProfile: Bool { profiles.count < profileLimit }
 
-    func register(email: String, password: String) throws {
+    /// Neues Konto, online bei Supabase, damit es auf jedem Gerät klappt.
+    /// Ohne Netz wird es erst nur auf diesem Gerät angelegt und beim nächsten Anmelden online nachgeholt.
+    func register(email: String, password: String) async throws {
         let mail = email.trimmingCharacters(in: .whitespaces).lowercased()
         guard AuthError.looksLikeEmail(mail) else { throw AuthError.invalidEmail }
         guard password.count >= 8, password.contains(where: \.isNumber) else { throw AuthError.weakPassword }
         guard db.record(mail) == nil else { throw AuthError.emailTaken }
+        var session: CloudAccounts.Session?
+        do { session = try await CloudAccounts.signUp(email: mail, password: password) }
+        catch CloudAccounts.CloudError.alreadyRegistered { throw AuthError.emailTaken }
+        catch CloudAccounts.CloudError.offline { session = nil }
+        catch CloudAccounts.CloudError.server(let message) { throw AuthError.server(message) }
         // Ein anderes Konto war geladen: Es liegt sicher in der Datenbank, das neue fängt leer an.
-        if account != nil { clearSession() }
+        if account != nil { pushNow(); clearSession() }
+        cloudSession = session
         let salt = UUID().uuidString
         account = Account(email: mail, passwordHash: Account.hash(password, salt: salt), salt: salt,
                           created: .now, consented: .now, subscription: nil)
@@ -110,16 +122,43 @@ final class AppStore {
         save(signedInNow: true)
     }
 
-    /// Prüft E-Mail und Passwort gegen die Konten-Datenbank und lädt den Stand genau dieses Kontos.
-    /// Ein echter Dienst würde das auf einem Server tun, damit klappt es dann auf jedem Gerät.
-    func signIn(email: String, password: String) throws {
+    /// Anmelden online bei Supabase und den Stand dieses Kontos laden, auf jedem Gerät.
+    /// Ohne Netz zählt das Konto, das schon auf diesem Gerät gespeichert ist.
+    func signIn(email: String, password: String) async throws {
         let mail = email.trimmingCharacters(in: .whitespaces).lowercased()
-        guard let record = db.record(mail) else { throw savedAccounts.isEmpty ? AuthError.noAccount : AuthError.unknownEmail }
-        guard Account.hash(password, salt: record.salt) == record.passwordHash else { throw AuthError.wrongPassword }
-        if account?.email != mail, let snap = try? JSONDecoder().decode(Snapshot.self, from: record.state) {
-            clearSession()
+        let local = db.record(mail)
+        let localMatches = local.map { Account.hash(password, salt: $0.salt) == $0.passwordHash } ?? false
+        var session: CloudAccounts.Session?
+        var remote: Snapshot?
+        do {
+            let s = try await CloudAccounts.signIn(email: mail, password: password)
+            session = s
+            if let data = try await CloudAccounts.loadState(s) { remote = try? JSONDecoder().decode(Snapshot.self, from: data) }
+        } catch CloudAccounts.CloudError.invalidCredentials {
+            // Konto aus der Zeit vor den Online-Konten, nur auf diesem Gerät: jetzt einmal online anlegen.
+            guard localMatches else { throw AuthError.wrongCredentials }
+            session = try? await CloudAccounts.signUp(email: mail, password: password)
+        } catch CloudAccounts.CloudError.offline {
+            guard local != nil else { throw AuthError.offline }
+            guard localMatches else { throw AuthError.wrongPassword }
+        } catch CloudAccounts.CloudError.server(let message) {
+            throw AuthError.server(message)
+        }
+        if account?.email != mail { pushNow(); clearSession() }
+        // Online-Stand zuerst, sonst der Stand auf diesem Gerät, sonst ein frisches Konto.
+        if let remote {
+            apply(remote)
+        } else if account?.email != mail, let local, let snap = try? JSONDecoder().decode(Snapshot.self, from: local.state) {
             apply(snap)
         }
+        if account?.email != mail {
+            account = Account(email: mail, passwordHash: "", salt: "", created: .now, consented: .now, subscription: nil)
+        }
+        // Online liegt kein Passwort-Hash, für das Anmelden ohne Netz bekommt das Gerät einen eigenen.
+        let salt = UUID().uuidString
+        account?.salt = salt
+        account?.passwordHash = Account.hash(password, salt: salt)
+        cloudSession = session
         signedIn = true
         hasChosenViewers = profiles.count <= 1
         save(signedInNow: true)
@@ -128,15 +167,28 @@ final class AppStore {
     /// E-Mails aller Konten auf diesem Gerät, zum schnellen Zurückwechseln beim Anmelden.
     var savedAccounts: [String] { db.emails }
 
+    /// Gerade online angemeldet (sonst nur auf dem Gerät).
+    var isOnline: Bool { cloudSession != nil }
+
     func signOut() {
+        pushNow()
+        cloudSession = nil
+        CloudAccounts.signOut()
         signedIn = false
         hasChosenViewers = false
         skippedToday = []; undoStack = []
         save()
     }
 
-    /// DSGVO: Konto samt aller Profile, Bewertungen und Importe löschen, auch aus der Datenbank.
+    /// DSGVO: Konto samt aller Profile, Bewertungen und Importe löschen, online und auf dem Gerät.
     func deleteAccount() {
+        if let session = cloudSession {
+            Task {
+                guard let s = await CloudAccounts.valid(session) else { return }
+                try? await CloudAccounts.deleteAccount(s)
+            }
+        }
+        cloudSession = nil
         if let email = account?.email { db.delete(email) }
         account = nil
         signedIn = false
@@ -184,6 +236,7 @@ final class AppStore {
 
     /// Startparameter `-seedDemo`: ein fertiges Profil, für Pitch-Demos und Screenshots.
     func seedDemo() {
+        cloudSession = nil
         resetAll()
         var demo = Profile(name: "Demo", colorIndex: 1, avatar: "scifi-0")
         for (id, i) in [("dune", Interaction.loved), ("interstellar", .loved), ("inception", .liked), ("the-batman", .liked),
@@ -413,6 +466,9 @@ final class AppStore {
     // in der Konten-Datenbank, damit man per Anmeldung zu ihm zurückkehren kann.
 
     private let db = AccountDatabase()
+    /// Online-Sitzung des angemeldeten Kontos (nil = nur auf dem Gerät, z. B. ohne Netz oder im Demo-Modus).
+    private var cloudSession: CloudAccounts.Session?
+    private var pushTask: Task<Void, Never>?
 
     private struct Snapshot: Codable {
         var profiles: [Profile]
@@ -436,6 +492,46 @@ final class AppStore {
         try? FileManager.default.createDirectory(at: .applicationSupportDirectory, withIntermediateDirectories: true)
         try? data.write(to: fileURL, options: .atomic)
         if let account { db.upsert(account, state: data, signedInNow: signedInNow) }
+        schedulePush(data)
+    }
+
+    /// Online speichern, kurz gesammelt: Viele Swipes hintereinander ergeben einen Upload.
+    /// Der Upload gehört fest zu der Sitzung, in der gespeichert wurde, auch wenn danach das Konto wechselt.
+    private func schedulePush(_ data: Data) {
+        guard let session = cloudSession, signedIn else { return }
+        pushTask?.cancel()
+        let state = Self.onlineState(data)
+        pushTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1.5))
+            guard !Task.isCancelled else { return }
+            await self?.push(state, with: session)
+        }
+    }
+
+    /// Sofort hochladen (vor Abmelden oder Kontowechsel).
+    private func pushNow() {
+        guard let session = cloudSession, account != nil,
+              let data = try? JSONEncoder().encode(Snapshot(profiles: profiles, activeProfileIDs: activeProfileIDs,
+                                                            onboardingDone: onboardingDone, pendingRatings: pendingRatings,
+                                                            account: account, signedIn: true)) else { return }
+        pushTask?.cancel()
+        let state = Self.onlineState(data)
+        Task { await push(state, with: session) }
+    }
+
+    private func push(_ state: Data, with session: CloudAccounts.Session) async {
+        guard let fresh = await CloudAccounts.valid(session) else { return }
+        if cloudSession?.email == fresh.email { cloudSession = fresh }
+        try? await CloudAccounts.saveState(state, session: fresh)
+    }
+
+    /// Online liegt kein Passwort-Hash, das Passwort prüft Supabase selbst.
+    private static func onlineState(_ data: Data) -> Data {
+        guard var snap = try? JSONDecoder().decode(Snapshot.self, from: data) else { return data }
+        snap.account?.passwordHash = ""
+        snap.account?.salt = ""
+        snap.signedIn = nil
+        return (try? JSONEncoder().encode(snap)) ?? data
     }
 
     private func load() {
@@ -443,6 +539,8 @@ final class AppStore {
               let snap = try? JSONDecoder().decode(Snapshot.self, from: data) else { return }
         apply(snap)
         signedIn = snap.signedIn ?? false
+        // Online-Sitzung nach einem Neustart weiterverwenden, aber nur für genau dieses Konto.
+        if signedIn, let s = CloudAccounts.storedSession, s.email == account?.email { cloudSession = s }
         // Älterer Stand von vor der Datenbank: Konto einmal übernehmen.
         if let account, db.record(account.email) == nil { db.upsert(account, state: data) }
     }

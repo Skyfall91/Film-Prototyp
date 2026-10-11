@@ -133,6 +133,7 @@ private struct RegisterForm: View {
     @State private var password = ""
     @State private var consent = false
     @State private var error: String?
+    @State private var busy = false
 
     private var rules: [(String, Bool)] {
         [("Mindestens 8 Zeichen", password.count >= 8),
@@ -171,22 +172,30 @@ private struct RegisterForm: View {
             }
 
             Button {
-                do { try withAnimation(.smooth) { try store.register(email: email, password: password) } }
-                catch { withAnimation { self.error = error.localizedDescription } }
+                busy = true
+                Task {
+                    do { try await store.register(email: email, password: password) }
+                    catch { withAnimation { self.error = error.localizedDescription } }
+                    busy = false
+                }
             } label: {
-                Text("Konto erstellen").font(.headline).frame(maxWidth: .infinity).padding(.vertical, 6)
+                ZStack {
+                    Text("Konto erstellen").opacity(busy ? 0 : 1)
+                    if busy { ProgressView().tint(.black) }
+                }
+                .font(.headline).frame(maxWidth: .infinity).padding(.vertical, 6)
             }
             .buttonStyle(.glassProminent)
             .foregroundStyle(.black)
             .controlSize(.large)
-            .disabled(!valid)
+            .disabled(!valid || busy)
 
             Button("Schon ein Konto? Anmelden", action: switchToLogin)
                 .font(.subheadline.weight(.semibold))
                 .frame(maxWidth: .infinity)
                 .tint(.secondary)
 
-            Text("Prototyp: Konten liegen in einer kleinen Datenbank auf diesem Gerät, das Passwort nur als Hash.")
+            Text("Konten liegen online bei Supabase (Server in Frankfurt). Ausgedachte E-Mail-Adressen reichen, es wird nichts verschickt.")
                 .font(.caption2).foregroundStyle(.tertiary)
                 .frame(maxWidth: .infinity)
                 .multilineTextAlignment(.center)
@@ -202,6 +211,7 @@ private struct LoginForm: View {
     @State private var password = ""
     @State private var error: String?
     @State private var forgot = false
+    @State private var busy = false
     @State private var saved: [String] = []
 
     var body: some View {
@@ -241,15 +251,23 @@ private struct LoginForm: View {
             }
 
             Button {
-                do { try withAnimation(.smooth) { try store.signIn(email: email, password: password) } }
-                catch { withAnimation { self.error = error.localizedDescription } }
+                busy = true
+                Task {
+                    do { try await store.signIn(email: email, password: password) }
+                    catch { withAnimation { self.error = error.localizedDescription } }
+                    busy = false
+                }
             } label: {
-                Text("Anmelden").font(.headline).frame(maxWidth: .infinity).padding(.vertical, 6)
+                ZStack {
+                    Text("Anmelden").opacity(busy ? 0 : 1)
+                    if busy { ProgressView().tint(.black) }
+                }
+                .font(.headline).frame(maxWidth: .infinity).padding(.vertical, 6)
             }
             .buttonStyle(.glassProminent)
             .foregroundStyle(.black)
             .controlSize(.large)
-            .disabled(email.isEmpty || password.isEmpty)
+            .disabled(email.isEmpty || password.isEmpty || busy)
 
             HStack {
                 Button("Passwort vergessen?") { forgot = true }
@@ -269,7 +287,7 @@ private struct LoginForm: View {
             Button("Neues Konto erstellen", action: switchToRegister)
             Button("Abbrechen", role: .cancel) {}
         } message: {
-            Text("Im fertigen Dienst kommt ein Link per E-Mail. Im Prototyp liegt das Konto nur auf diesem Gerät, du kannst einfach ein neues erstellen.")
+            Text("Im fertigen Dienst kommt ein Link per E-Mail. Im Prototyp gibt es den nicht, du kannst einfach ein neues Konto erstellen.")
         }
     }
 }
@@ -751,6 +769,7 @@ struct AccountView: View {
             if let account = store.account {
                 Section {
                     LabeledContent("E-Mail", value: account.email)
+                    LabeledContent("Gespeichert", value: store.isOnline ? "Online (Supabase, Frankfurt)" : "Nur auf diesem Gerät")
                     LabeledContent("Mitglied seit", value: account.created.formatted(.dateTime.month(.wide).year()))
                 }
                 Section("Abo") {
@@ -793,7 +812,7 @@ struct AccountView: View {
                     }
                     Button("Konto löschen", systemImage: "trash", role: .destructive) { confirmDelete = true }
                 } footer: {
-                    Text("Löschen entfernt Konto, Profile, Bewertungen und importierte Daten von diesem Gerät.")
+                    Text(store.isOnline ? "Löschen entfernt Konto, Profile, Bewertungen und importierte Daten online und von diesem Gerät." : "Löschen entfernt Konto, Profile, Bewertungen und importierte Daten von diesem Gerät.")
                 }
             }
         }

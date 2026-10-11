@@ -104,7 +104,7 @@ Ganz oben im Xcode-Fenster sind die zwei Knöpfe, die du brauchst:
 
 | | |
 |---|---|
-| 🔑 **Konto erstellen** | **Irgendeine** E-Mail und ein Passwort mit mindestens 8 Zeichen und einer Zahl, z. B. `test@test.de` / `test1234`. Nichts wird verschickt, alles bleibt auf deinem Gerät. Merk dir das Passwort: Nach dem Abmelden brauchst du es wieder. |
+| 🔑 **Konto erstellen** | Eine **ausgedachte** E-Mail reicht, z. B. `dein-name@test.de`, dazu ein Passwort mit mindestens 8 Zeichen und einer Zahl. Es wird nichts verschickt. Das Konto liegt online, du kannst dich damit auch auf einem anderen iPhone anmelden. Merk dir das Passwort: Nach dem Abmelden brauchst du es wieder. |
 | 💳 **Abo** | Ist ein **Demo-Kauf**. Du zahlst nichts und gibst keine Bankdaten ein. |
 | 🎞️ **Filme** | Statt echter Filme laufen Trailer von YouTube. Dafür brauchst du Internet. |
 
@@ -221,7 +221,7 @@ SwiftUI, iOS 26, Xcode 26 oder neuer. Signiert wird mit dem Personal Team, daher
 
 | Bereich | Was passiert |
 |---|---|
-| Konto | Registrieren / Anmelden gegen eine kleine Konten-Datenbank auf dem Gerät (SwiftData, Passwort nur als Hash). Mehrere Konten, jedes mit eigenen Profilen; nach dem Abmelden kommt man per Login genau zu diesem Stand zurück. Abmelden, Konto löschen (DSGVO) |
+| Konto | Online-Konten über Supabase (Server in Frankfurt): Registrieren und Anmelden mit E-Mail und Passwort, der Stand (Profile, Bewertungen, Merkliste) liegt je Konto online und kommt auf jedem Gerät per Login zurück. Jedes Konto sieht nur seine eigenen Daten (Row Level Security). Ohne Netz zählt die Konten-Datenbank auf dem Gerät (SwiftData). Abmelden, Konto löschen online und auf dem Gerät (DSGVO) |
 | Abo | Tarife Solo / Duo / Familie (Profile, gleichzeitige Geräte, Zusammen-Modus; 4K in allen). Abo-Wahl nach dem Geschmacksprofil, 7 Tage gratis, Demo-Kauf ohne Zahlungsdaten, Tarif wechseln/kündigen. Ohne Abo: Trailer und Vorschläge ja, Abspielen nein |
 | Wer schaut? | Startbildschirm bei mehreren Profilen, mehrere antippen = Zusammen-Modus |
 | Profil erstellen | Avatar-Galerie nach Genres, Name, Kinderprofil mit FSK-Stufe |
@@ -240,7 +240,8 @@ SwiftUI, iOS 26, Xcode 26 oder neuer. Signiert wird mit dem Personal Team, daher
 ### Architektur (für die Modellierung)
 
 - `Model/`: `Film`, `Profile`, `Interaction`, `AppStore` (Zustand + JSON-Persistenz)
-- `Model/AccountDatabase`: Konten-Datenbank (SwiftData), je Konto Anmeldedaten und gespeicherter Stand
+- `Model/CloudAccounts`: Online-Konten (Supabase Auth und eine Tabelle `account_state`), Sitzung im Schlüsselbund
+- `Model/AccountDatabase`: Konten-Datenbank auf dem Gerät (SwiftData), für ohne Netz und den schnellen Kontowechsel
 - `Model/Account`: Konto, Tarif (`Plan`), `Subscription`, `PurchaseService` (StoreKit 2 mit Demo-Kauf als Rückfall) → später **Strategy**/**Adapter** für Zahlungsanbieter
 - `Engine/RecommendationEngine`: Hybrid: Matrix-Faktorisierung aus MovieLens (Filmbonus + 24 Geschmacksfaktoren) + IMDb + inhaltsbasiertes Modell (Genre, Stimmung, Regie, Cast)
 - `Engine/MoodSearch`: austauschbare KI-Komponente (Apple Intelligence ↔ Stichwort-Fallback) → später **Strategy**
