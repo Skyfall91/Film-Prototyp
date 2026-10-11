@@ -1,0 +1,47 @@
+name: FilmPrototyp
+options:
+  bundleIdPrefix: de.beispiel
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+packages:
+  YouTubeKit:
+    url: https://github.com/alexeichhorn/YouTubeKit.git
+    from: 0.4.9
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+    SWIFT_APPROACHABLE_CONCURRENCY: YES
+    CODE_SIGN_STYLE: Automatic
+targets:
+  FilmPrototyp:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+        excludes:
+          - "AppIcon.icon/**"
+          - "**/.impeccable/**"
+      - path: App/AppIcon.icon
+        type: file
+        buildPhase: resources
+    dependencies:
+      - package: YouTubeKit
+    scheme: {}
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: de.beispiel.filmprototyp
+        PRODUCT_NAME: FilmPrototyp
+        INFOPLIST_KEY_CFBundleDisplayName: Film
+        INFOPLIST_KEY_NSFaceIDUsageDescription: "Mit Face ID bestätigst du den Demo-Kauf – wie bei Apple Pay."
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_UIUserInterfaceStyle: Dark
+        GENERATE_INFOPLIST_FILE: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: "1,2"
+        MARKETING_VERSION: "0.1"
+        CURRENT_PROJECT_VERSION: "1"
+        DEVELOPMENT_LANGUAGE: de

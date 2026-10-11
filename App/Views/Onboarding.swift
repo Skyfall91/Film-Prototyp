@@ -1,0 +1,509 @@
+import SwiftUI
+import UniformTypeIdentifiers
+
+/// Onboarding als kurzes Spiel: Profil → bekannte Filme swipen → optional importieren → Geschmacksprofil → Abo.
+/// Bezahlt wird erst, nachdem man gesehen hat, wie gut die App einen kennt.
+/// Wird auch zum Anlegen weiterer Profile genutzt (dann ohne Abo-Schritt; bei vollem Tarif mit Upgrade vorab).
+struct OnboardingFlow: View {
+    enum Step { case upgrade, name, calibrate, importData, reveal, plan }
+    enum Mode { case firstRun, addProfile }
+
+    @Environment(AppStore.self) private var store
+    var mode: Mode = .firstRun
+    var onFinish: (UUID) -> Void
+
+    /// Abbrechen (nur beim Anlegen weiterer Profile, z. B. wenn kein größerer Tarif gewählt wird).
+    var cancel: (() -> Void)?
+    @State private var step: Step
+    @State private var profileID: UUID?
+
+    init(mode: Mode = .firstRun, start: Step? = nil, profileID: UUID? = nil,
+         cancel: (() -> Void)? = nil, onFinish: @escaping (UUID) -> Void) {
+        self.mode = mode
+        self.onFinish = onFinish
+        self.cancel = cancel
+        _step = State(initialValue: start ?? .name)
+        _profileID = State(initialValue: profileID)
+    }
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            switch step {
+            case .upgrade:
+                PlanPicker(mode: .upgrade) { upgraded in
+                    if upgraded { go(.name) } else { cancel?() }
+                }
+            case .name:
+                ProfileEditor(isFirst: mode == .firstRun) { name, art, fsk in
+                    profileID = store.addProfile(name: name, colorIndex: art.colorIndex, maxFSK: fsk, avatar: art.id)
+                    go(.calibrate)
+                }
+            case .calibrate:
+                if let profileID { CalibrationStep(profileID: profileID) { go(.importData) } }
+            case .importData:
+                if let profileID { ImportStep(profileID: profileID) { go(.reveal) } }
+            case .reveal:
+                if let profileID {
+                    RevealStep(profileID: profileID, buttonTitle: mode == .firstRun ? "Zeig mir meinen Film" : "Fertig") {
+                        if mode == .firstRun && !store.canPlay { go(.plan) } else { onFinish(profileID) }
+                    }
+                }
+            case .plan:
+                if let profileID { PlanPicker(mode: .onboarding) { _ in onFinish(profileID) } }
+            }
+        }
+        .preferredColorScheme(.dark)
+        .onAppear {
+            if mode == .addProfile && step == .name && !store.canAddProfile { step = .upgrade }
+        }
+    }
+
+    private func go(_ next: Step) {
+        withAnimation(.smooth(duration: 0.45)) { step = next }
+    }
+}
+
+/// Langsam scrollende Wand aus Postern – grau, ein Poster leuchtet (wie das App-Icon).
+struct PosterWall: View {
+    /// 24 bekannte Filme reichen für eine endlose Wand – jede Spalte läuft im Kreis.
+    private let columns: [[Film]] = {
+        let films = Array(FilmIndex.all.filter { !$0.niche && !$0.isSeries && !$0.comingSoon }.shuffled().prefix(24))
+        return (0..<3).map { c in films.enumerated().filter { $0.offset % 3 == c }.map(\.element) }
+    }()
+
+    /// Das eine Poster, das gerade in Farbe leuchtet. Der Fokus springt durchs Bild:
+    /// links, rechts, Mitte, oben, unten – aber immer auf ein Poster, das gerade gut zu sehen ist.
+    private struct Focus: Equatable {
+        var column: Int
+        var filmID: String
+    }
+    @State private var focus: Focus?
+    @State private var size: CGSize = .zero
+
+    private static let speeds = [14.0, 9.0, 12.0]
+    private enum Spot { case any, top, bottom }
+    /// Spalte (nil = eine andere als zuletzt) und welches der gut sichtbaren Poster darin.
+    private static let spots: [(column: Int?, spot: Spot)] = [(0, .any), (2, .any), (1, .any), (nil, .top), (nil, .bottom)]
+
+    var body: some View {
+        // 48 Kacheln statt 834: Die Zeitleiste verschiebt nur die drei Spalten.
+        TimelineView(.animation) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            GeometryReader { geo in
+                let w = Self.tileWidth(geo.size.width)
+                HStack(alignment: .top, spacing: 12) {
+                    ForEach(0..<3, id: \.self) { c in
+                        column(c, w: w, h: w * 1.5)
+                            .offset(y: offset(c, t: t, width: geo.size.width))
+                    }
+                }
+                .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
+                .clipped()
+            }
+        }
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { size = $0 }
+        .onAppear { PosterCache.warmUp(columns.flatMap { $0 }.map(\.id)) }
+        .task {
+            var step = 0
+            while !Task.isCancelled {
+                if size.width > 0 {
+                    let spot = Self.spots[step % Self.spots.count]
+                    let c = spot.column ?? [0, 1, 2].filter { $0 != focus?.column }.randomElement()!
+                    if let next = film(spot.spot, column: c, t: Date.now.timeIntervalSinceReferenceDate) { focus = next }
+                    step += 1
+                }
+                try? await Task.sleep(for: .seconds(2.6))
+            }
+        }
+    }
+
+    private static func tileWidth(_ width: CGFloat) -> CGFloat { (width - 24) / 3 }
+
+    /// Senkrechte Verschiebung einer Spalte zum Zeitpunkt `t` – die mittlere läuft nach oben.
+    private func offset(_ c: Int, t: Double, width: CGFloat) -> CGFloat {
+        let pitch = Self.tileWidth(width) * 1.5 + 12
+        let total = pitch * CGFloat(columns[c].count)
+        let shift = CGFloat((t * Self.speeds[c]).truncatingRemainder(dividingBy: Double(total)))
+        return c == 1 ? -shift : shift - total
+    }
+
+    /// Ein Poster in Spalte `c`, das gerade (und die nächsten Sekunden) gut zu sehen ist:
+    /// unter der Statusleiste und über dem Text, der ab etwa 45 % der Höhe beginnt.
+    private func film(_ spot: Spot, column c: Int, t: Double) -> Focus? {
+        let h = Self.tileWidth(size.width) * 1.5
+        let pitch = h + 12
+        let band = 50.0...(size.height * 0.45)
+        let off = offset(c, t: t, width: size.width)
+        let drift = (c == 1 ? -1.0 : 1.0) * Self.speeds[c] * 2   // Bewegung während der Fokuszeit
+        let list = columns[c] + columns[c]
+        let visible = list.indices.compactMap { i -> (i: Int, top: CGFloat, share: CGFloat)? in
+            let top = off + CGFloat(i) * pitch + drift / 2
+            let shown = min(top + h, band.upperBound) - max(top, band.lowerBound)
+            guard shown > 0, list[i].id != focus?.filmID else { return nil }
+            return (i, top, shown / h)
+        }
+        let good = visible.filter { $0.share > 0.75 }
+        let pick: (i: Int, top: CGFloat, share: CGFloat)? = switch spot {
+        case .any: visible.max { $0.share < $1.share }
+        case .top: good.min { $0.top < $1.top } ?? visible.max { $0.share < $1.share }
+        case .bottom: good.max { $0.top < $1.top } ?? visible.max { $0.share < $1.share }
+        }
+        return pick.map { Focus(column: c, filmID: list[$0.i].id) }
+    }
+
+    private func column(_ c: Int, w: CGFloat, h: CGFloat) -> some View {
+        VStack(spacing: 12) {
+            ForEach(Array((columns[c] + columns[c]).enumerated()), id: \.offset) { _, film in
+                let highlight = focus == Focus(column: c, filmID: film.id)
+                PosterView(film: film, cornerRadius: 12)
+                    .frame(width: w, height: h)
+                    .saturation(highlight ? 1 : 0)
+                    .opacity(highlight ? 1 : 0.38)
+                    .animation(.easeInOut(duration: 0.9), value: highlight)
+            }
+        }
+    }
+}
+
+// MARK: - Kalibrierung (Swipe bekannter Filme)
+
+struct CalibrationStep: View {
+    @Environment(AppStore.self) private var store
+    let profileID: UUID
+    var title = "Kennst du den?"
+    var minimum = 6
+    var next: () -> Void
+
+    @State private var queue: [Film] = []
+    @State private var trigger: SwipeDirection?
+    @State private var rated = 0
+
+    private let target = 12
+    private let options: [SwipeDirection: SwipeOption] = [
+        .left: .init(title: "Nicht meins", symbol: "hand.thumbsdown.fill", color: Color(red: 1, green: 0.27, blue: 0.3)),
+        .right: .init(title: "Mag ich", symbol: "hand.thumbsup.fill", color: Color(red: 0.2, green: 0.85, blue: 0.5)),
+        .up: .init(title: "Lieblingsfilm", symbol: "heart.fill", color: Color(red: 1, green: 0.3, blue: 0.6)),
+        .down: .init(title: "Nicht gesehen", symbol: "eye.slash.fill", color: Color(white: 0.5))
+    ]
+
+    private var profile: Profile? { store.profiles.first { $0.id == profileID } }
+    private var knowledge: Double { min(Double(rated) / Double(target), 1) }
+
+    var body: some View {
+        VStack(spacing: 18) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title).font(.title.weight(.heavy))
+                    Text("Wisch in die Richtung, die passt.").font(.subheadline).foregroundStyle(.secondary)
+                }
+                Spacer()
+                KnowledgeRing(value: knowledge, size: 54)
+            }
+
+            SwipeDeck(items: queue, options: options, trigger: $trigger,
+                      onCommit: { film, d in swiped(d, film) }) { film, _ in
+                PosterView(film: film, cornerRadius: 28)
+                    .overlay(alignment: .bottom) {
+                        VStack(spacing: 2) {
+                            Text(film.title).font(.title3.weight(.bold)).multilineTextAlignment(.center)
+                            Text("\(String(film.year)) · \(film.genres.prefix(2).joined(separator: " · "))")
+                                .font(.subheadline).foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 14).frame(maxWidth: .infinity)
+                        // Dunkel abgetönt, damit Titel auch auf hellen Postern lesbar bleibt.
+                        .background(Color.black.opacity(0.55))
+                        .background(.ultraThinMaterial)
+                        .environment(\.colorScheme, .dark)
+                        .clipShape(.rect(bottomLeadingRadius: 28, bottomTrailingRadius: 28))
+                    }
+                    .cardShadow()
+            }
+            .frame(maxHeight: .infinity)
+            .padding(.horizontal, 12)
+
+            HStack(spacing: 14) {
+                roundButton(.left); roundButton(.down); roundButton(.up); roundButton(.right)
+            }
+
+            Button {
+                next()
+            } label: {
+                Text(rated >= minimum ? "Weiter" : "Noch \(minimum - rated) bewerten")
+                    .contentTransition(.numericText(countsDown: true))
+                    .font(.headline).frame(maxWidth: .infinity).padding(.vertical, 4)
+            }
+            .buttonStyle(.glass)
+            .disabled(rated < minimum)
+        }
+        .padding(20)
+        .ignoresSafeArea(.keyboard)
+        .task {
+            guard queue.isEmpty else { return }
+            let films = FilmIndex.calibrationQueue(maxFSK: profile?.maxFSK ?? 18,
+                                                  excluding: Set(profile?.interactions.keys.map { $0 } ?? []))
+            PosterCache.warmUp(films.prefix(10).map(\.id))
+            // Karten wachsen nach dem Wechsel animiert auf volle Größe.
+            try? await Task.sleep(for: .milliseconds(120))
+            withAnimation(.spring(response: 0.55, dampingFraction: 0.78)) { queue = films }
+        }
+    }
+
+    private func roundButton(_ d: SwipeDirection) -> some View {
+        let o = options[d]!
+        return VStack(spacing: 6) {
+            Button { trigger = d } label: {
+                Image(systemName: o.symbol).font(.title3.weight(.bold)).foregroundStyle(o.color)
+                    .frame(width: 56, height: 56)
+            }
+            .buttonStyle(.plain)
+            .glassEffect(.regular.interactive(), in: .circle)
+            .accessibilityLabel(o.title)
+            Text(o.title).font(.caption2).foregroundStyle(.secondary).lineLimit(1).fixedSize()
+        }
+        .frame(width: 74)
+    }
+
+    private func swiped(_ d: SwipeDirection, _ film: Film) {
+        let interaction: Interaction = switch d {
+        case .left: .disliked
+        case .right: .liked
+        case .up: .loved
+        case .down: .unseen
+        }
+        store.calibrate(profile: profileID, film: film, interaction)
+        if interaction != .unseen { withAnimation(.snappy) { rated += 1 } }
+        withAnimation(.spring(response: 0.42, dampingFraction: 0.8)) { queue.removeFirst() }
+        if rated >= target + 6 || queue.isEmpty { next() }
+    }
+}
+
+/// „Wie gut kennen wir dich?“ – Ring, der sich mit jedem Swipe füllt.
+struct KnowledgeRing: View {
+    var value: Double
+    var size: CGFloat = 54
+    var body: some View {
+        ZStack {
+            Circle().stroke(.white.opacity(0.12), lineWidth: size * 0.1)
+            Circle().trim(from: 0, to: value)
+                .stroke(.tint,
+                        style: StrokeStyle(lineWidth: size * 0.1, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+            Text("\(Int(value * 100)) %").font(.system(size: size * 0.24, weight: .bold, design: .rounded))
+                .contentTransition(.numericText())
+        }
+        .frame(width: size, height: size)
+        .animation(.smooth, value: value)
+    }
+}
+
+// MARK: - Import
+
+private struct ImportStep: View {
+    @Environment(AppStore.self) private var store
+    let profileID: UUID
+    var next: () -> Void
+
+    @State private var showImporter = false
+    @State private var result: ImportResult?
+    @State private var error: String?
+    @State private var search = ""
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                Text("Noch genauer?").font(.largeTitle.weight(.heavy))
+                Text("Bring deine Bewertungen mit – oder such dir deine Lieblingsfilme raus. Alles optional.")
+                    .foregroundStyle(.secondary)
+
+                Button { showImporter = true } label: {
+                    HStack(spacing: 14) {
+                        Image(systemName: "square.and.arrow.down.on.square.fill").font(.title2)
+                            .foregroundStyle(Color(red: 0.25, green: 0.85, blue: 0.5))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Letterboxd oder IMDb importieren").font(.headline)
+                            Text("CSV aus dem Daten-Export (ratings.csv)").font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+                    }
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .glassEffect(in: .rect(cornerRadius: 22))
+
+                if let result {
+                    Label {
+                        Text("\(result.source): \(result.totalRows) Bewertungen gelesen, \(result.matched.count) davon in unserem Katalog erkannt.")
+                    } icon: { Image(systemName: "checkmark.circle.fill").foregroundStyle(.green) }
+                    .font(.subheadline)
+                    .transition(.opacity)
+                }
+                if let error { Text(error).font(.footnote).foregroundStyle(.red) }
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Lieblingsfilme").font(.headline)
+                    TextField("Film suchen …", text: $search)
+                        .padding(12)
+                        .glassEffect(in: .rect(cornerRadius: 16))
+                    ForEach(searchResults) { film in
+                        let loved = profile?.interactions[film.id] == .loved
+                        HStack(spacing: 12) {
+                            PosterView(film: film, cornerRadius: 6).frame(width: 40)
+                            VStack(alignment: .leading) {
+                                Text(film.title).font(.subheadline.weight(.semibold))
+                                Text(String(film.year)).font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button {
+                                store.calibrate(profile: profileID, film: film, loved ? .liked : .loved)
+                            } label: {
+                                Image(systemName: loved ? "heart.fill" : "heart")
+                                    .font(.title3).foregroundStyle(loved ? .pink : .secondary)
+                            }
+                            .sensoryFeedback(.success, trigger: loved)
+                        }
+                    }
+                }
+                .padding(.top, 8)
+            }
+            .padding(24)
+        }
+        .safeAreaInset(edge: .bottom) {
+            Button(action: next) {
+                Text(result == nil ? "Überspringen" : "Weiter").font(.headline).frame(maxWidth: .infinity).padding(.vertical, 6)
+            }
+            .buttonStyle(.glassProminent)
+            .foregroundStyle(.black)
+            .controlSize(.large)
+            .padding(.horizontal, 24).padding(.bottom, 8)
+        }
+        .fileImporter(isPresented: $showImporter, allowedContentTypes: [.commaSeparatedText, .plainText, .text]) { res in
+            guard case .success(let url) = res else { return }
+            let access = url.startAccessingSecurityScopedResource()
+            defer { if access { url.stopAccessingSecurityScopedResource() } }
+            guard let data = try? Data(contentsOf: url), let parsed = LibraryImport.parse(data) else {
+                error = "Die Datei konnte nicht gelesen werden. Erwartet: ratings.csv von Letterboxd oder IMDb."
+                return
+            }
+            for (film, interaction) in parsed.matched { store.calibrate(profile: profileID, film: film, interaction) }
+            store.update(profileID) { $0.importedCount += parsed.totalRows - parsed.matched.count }
+            store.save()
+            withAnimation { result = parsed; error = nil }
+        }
+    }
+
+    private var profile: Profile? { store.profiles.first { $0.id == profileID } }
+
+    private var searchResults: [Film] {
+        let q = search.trimmingCharacters(in: .whitespaces)
+        let pool = FilmIndex.all.filter { !$0.comingSoon && $0.fsk <= (profile?.maxFSK ?? 18) }
+        guard !q.isEmpty else {
+            return pool.filter { profile?.interactions[$0.id] == .loved }
+        }
+        return pool.filter { $0.title.localizedCaseInsensitiveContains(q) || $0.originalTitle.localizedCaseInsensitiveContains(q) || $0.cast.contains { $0.localizedCaseInsensitiveContains(q) } || $0.director.localizedCaseInsensitiveContains(q) }
+            .prefix(6).map { $0 }
+    }
+}
+
+// MARK: - Geschmacksprofil enthüllen
+
+struct RevealStep: View {
+    @Environment(AppStore.self) private var store
+    let profileID: UUID
+    var buttonTitle: String
+    var done: () -> Void
+    @State private var sentence: String?
+    @State private var usedAI = false
+    @State private var shown = false
+
+    var body: some View {
+        let profile = store.profiles.first { $0.id == profileID }
+        VStack(alignment: .leading, spacing: 24) {
+            Spacer(minLength: 10)
+            if let profile {
+                HStack(spacing: 14) {
+                    AvatarView(profile: profile, size: 56)
+                    VStack(alignment: .leading) {
+                        Text("Dein Geschmacksprofil").font(.subheadline).foregroundStyle(.secondary)
+                        Text(profile.name).font(.largeTitle.weight(.heavy))
+                    }
+                }
+                TasteCard(profile: profile, sentence: sentence, usedAI: usedAI, animate: shown)
+            }
+            Spacer()
+            Button(action: done) {
+                Text(buttonTitle).font(.headline).frame(maxWidth: .infinity).padding(.vertical, 6)
+            }
+            .buttonStyle(.glassProminent)
+            .foregroundStyle(.black)
+            .controlSize(.large)
+        }
+        .padding(24)
+        .task {
+            guard let profile else { return }
+            withAnimation(.smooth(duration: 1.2).delay(0.2)) { shown = true }
+            let (s, ai) = await TasteWriter.sentence(for: profile)
+            withAnimation(.smooth(duration: 0.6)) { sentence = s; usedAI = ai }
+        }
+    }
+}
+
+/// Wiederverwendbare Karte: Satz + Balken der Lieblingsstimmungen/-genres.
+struct TasteCard: View {
+    let profile: Profile
+    var sentence: String?
+    var usedAI = false
+    var animate = true
+
+    var body: some View {
+        let summary = TasteSummary(profile: profile)
+        let bars = Array((summary.topMoods.prefix(3) + summary.topGenres.prefix(1)))
+        let maxValue = bars.map(\.1).max() ?? 1
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 8) {
+                // Wechsel vom Standardsatz zum KI-Satz: weich überblenden statt springen.
+                Text("„\(sentence ?? summary.sentence)“")
+                    .font(.title3.weight(.semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .id(sentence ?? summary.sentence)
+                    .transition(.blurReplace)
+                if usedAI {
+                    Label("Formuliert mit Apple Intelligence", systemImage: "apple.intelligence")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .transition(.blurReplace)
+                }
+            }
+            if !summary.topMoods.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(bars, id: \.0) { item in
+                        HStack {
+                            Text(item.0.moodLabel).font(.subheadline.weight(.medium)).frame(width: 130, alignment: .leading)
+                            GeometryReader { geo in
+                                Capsule().fill(.white.opacity(0.1))
+                                    .overlay(alignment: .leading) {
+                                        Capsule().fill(profile.color.gradient)
+                                            .frame(width: animate ? geo.size.width * item.1 / maxValue : 0)
+                                    }
+                            }
+                            .frame(height: 10)
+                        }
+                    }
+                }
+            }
+            HStack {
+                Label("\(profile.signalCount) Signale", systemImage: "waveform.path.ecg")
+                    .contentTransition(.numericText(value: Double(profile.signalCount)))
+                Spacer()
+                Text("Jeder Swipe macht's genauer")
+            }
+            .font(.caption).foregroundStyle(.secondary)
+        }
+        .padding(20)
+        .glassEffect(in: .rect(cornerRadius: 28))
+    }
+}
