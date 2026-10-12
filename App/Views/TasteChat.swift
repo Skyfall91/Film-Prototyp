@@ -16,6 +16,13 @@ struct TasteUpdate {
     var filmLiked: [Bool]
 }
 
+/// Eine Vermutung, die die KI selbst formuliert.
+@Generable
+struct ChatGuess {
+    @Guide(description: "Ein kurzer Satz auf Deutsch in Du-Form: eine Vermutung zur Stimmung, mit dem genannten Beispielfilm, plus eine knappe Rückfrage wie „Stimmt das?“. Keine anderen Filme, keine Anrede.")
+    var text: String
+}
+
 struct ChatMessage: Identifiable, Equatable {
     let id = UUID()
     var fromUser: Bool
@@ -41,8 +48,11 @@ struct TasteChatView: View {
     @State private var openQuestion: TasteQuestion?
     @State private var multiSelection: Set<String> = []
     @State private var scaleValue: Double = 0
-    /// Wie oft hintereinander „Keins von beiden“: Dann passen die Entweder-oder-Fragen gerade nicht.
-    @State private var rejections = 0
+    /// Statt einer Kette von Entweder-oder-Fragen überlegt die KI selbst und stellt eine Vermutung auf.
+    /// Höchstens drei pro Chat, nach zwei Fehlgriffen ist Schluss: Dann lieber selbst schreiben lassen.
+    @State private var guesses = 0
+    @State private var misses = 0
+    @State private var rejectedMoods: Set<String> = []
     @FocusState private var focused: Bool
 
     private var profile: Profile? { store.profiles.first { $0.id == profileID } }
@@ -254,28 +264,60 @@ struct TasteChatView: View {
     }
 
     /// Nächste gezielte Frage, dort, wo das Profil am wenigsten weiß.
-    /// Zuerst die vorbereiteten Fragen, danach Entweder-oder-Fragen aus Alltagssituationen.
+    /// Zuerst die vorbereiteten Fragen, danach eigene Vermutungen der KI statt Entweder-oder-Ketten.
     /// Gestellte Fragen werden pro Profil gemerkt, nichts wird doppelt gefragt.
     private func askNext() {
         guard let profile else { return }
         let history = TasteQuestions.asked(for: profileID)
-        // Zweimal „Keins von beiden“: nicht weiter raten, sondern offen fragen.
-        if rejections >= 2 {
-            rejections = 0
-            withAnimation(.smooth) {
-                openQuestion = nil
-                messages.append(ChatMessage(fromUser: false, text: "Okay, beides trifft's nicht. Worauf hast du stattdessen Lust? Ein Film, eine Stimmung oder ein Name reicht."))
-            }
-            return
-        }
-        if let q = TasteQuestions.next(for: profile, asked: Set(history))
-            ?? SituationQuestions.next(for: profile, history: history) {
+        if let q = TasteQuestions.next(for: profile, asked: Set(history)) {
             present(q); return
         }
+        guard misses < 2, guesses < 3 else { finish(); return }
+        withAnimation(.smooth) { thinking = true }
+        Task {
+            let q = await makeGuess()
+            withAnimation(.smooth) { thinking = false }
+            if let q { present(q) } else { finish() }
+        }
+    }
+
+    private func finish() {
+        let text = misses >= 2
+            ? "Okay, da lag ich daneben. Schreib mir einfach, worauf du Lust hast, dann lerne ich direkt daraus."
+            : "Das war's von meiner Seite. Wenn dir noch was einfällt, schreib's einfach."
+        guard messages.last?.text != text else { return }
         withAnimation(.smooth) {
             openQuestion = nil
-            messages.append(ChatMessage(fromUser: false, text: "Das war's von meiner Seite. Wenn dir noch was einfällt, schreib's einfach."))
+            messages.append(ChatMessage(fromUser: false, text: text))
         }
+    }
+
+    /// Die KI überlegt selbst: Unter den besten Vorschlägen für dieses Profil die Stimmung,
+    /// die am häufigsten vorkommt, über die das Profil aber noch nichts sicher weiß.
+    /// Daraus wird eine Vermutung mit Beispielfilm, die man nur bestätigen oder verneinen muss.
+    private func makeGuess() async -> TasteQuestion? {
+        guard let profile else { return nil }
+        let asked = Set(TasteQuestions.asked(for: profileID))
+        let top = RecommendationEngine.recommendations(profiles: [profile], runtime: nil, skipped: [], limit: 15)
+        var count: [String: Int] = [:]
+        for r in top { for m in r.film.moods { count[m, default: 0] += 1 } }
+        let open = count.keys.filter {
+            !asked.contains("g:\($0)") && !rejectedMoods.contains($0) && abs(profile.affinity["m:\($0)"] ?? 0) < 1.2
+        }
+        guard let mood = open.max(by: { (count[$0]!, $1) < (count[$1]!, $0) }),
+              let example = top.first(where: { $0.film.moods.contains(mood) })?.film else { return nil }
+        let label = mood.moodLabel + "es"
+        var text = "Ich glaube, dir liegt gerade etwas \(label), so wie „\(example.title)“. Stimmt das?"
+        if let session, let r = try? await session.respond(
+            to: "Formuliere eine Vermutung: Der Person liegt gerade etwas \(label). Beispielfilm: „\(example.title)“.",
+            generating: ChatGuess.self).content, r.text.contains(example.title) {
+            text = r.text.withoutDashes
+        }
+        guesses += 1
+        return TasteQuestion(id: "g:\(mood)", text: text, answers: [
+            .init(label: "Ja, genau", affinity: ["m:\(mood)": 1.2]),
+            .init(label: "Eher nicht", affinity: ["m:\(mood)": -0.8])
+        ])
     }
 
     private func present(_ q: TasteQuestion) {
@@ -287,7 +329,14 @@ struct TasteChatView: View {
     }
 
     private func answer(_ q: TasteQuestion, _ a: TasteQuestion.Answer) {
-        rejections = a.label == SituationQuestions.neither ? rejections + 1 : 0
+        if q.id.hasPrefix("g:") {
+            if a.affinity.values.contains(where: { $0 < 0 }) {
+                misses += 1
+                rejectedMoods.insert(String(q.id.dropFirst(2)))
+            } else {
+                misses = 0
+            }
+        }
         commit(label: a.label, affinity: a.affinity)
     }
 

@@ -76,6 +76,7 @@ struct RootView: View {
 
 struct MainTabs: View {
     @Environment(AppStore.self) private var store
+    @State private var hero = HeroCoordinator()
     var body: some View {
         TabView(selection: Bindable(store).selectedTab) {
             Tab("Für dich", systemImage: "rectangle.stack.fill", value: 0) { ForYouView() }
@@ -85,6 +86,8 @@ struct MainTabs: View {
             Tab("Suche", systemImage: "magnifyingglass", value: 4, role: .search) { MoodSearchView() }
         }
         .tabBarMinimizeBehavior(.onScrollDown)
+        .overlay { HeroOverlay() }
+        .environment(hero)
         .sheet(item: Bindable(store).ratingToPresent) { RatingSheet(pending: $0) }
     }
 }

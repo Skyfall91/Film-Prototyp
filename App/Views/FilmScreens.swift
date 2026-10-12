@@ -12,6 +12,15 @@ struct FilmDetailView: View {
     @State private var aiTeaser: String?
     @State private var bookmarkBounce = 0
     @State private var sharePlay = false
+    /// Morph von „Für dich“: Das Cover fliegt als eigene Ebene herein (`HeroOverlay`), solange
+    /// bleibt das echte Cover hier unsichtbar und liefert nur die Zielposition.
+    var posterHidden = false
+    var contentVisible = true
+    var onClose: (() -> Void)? = nil
+    var onPosterFrame: ((CGRect) -> Void)? = nil
+    var onTitleFrame: ((CGRect) -> Void)? = nil
+    static let titleFont = Font.system(size: 34, weight: .semibold, design: .serif)
+    @State private var closing = false
 
     var body: some View {
         let rec = store.recommendation(for: film)
@@ -30,6 +39,9 @@ struct FilmDetailView: View {
                             }
                             .transition(.opacity)
                         }
+                    }
+                    if let voices = film.voices, !voices.isEmpty {
+                        editorial(voices)
                     }
                     if film.isSeries {
                         EpisodeList(film: film) { ref in
@@ -63,7 +75,27 @@ struct FilmDetailView: View {
             .padding(.bottom, 30)
         }
         .scrollIndicators(.hidden)
-        .background(BlurredBackdrop(film: film))
+        // Nach unten ziehen schließt, wie bei einem Sheet.
+        .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y + $0.contentInsets.top } action: { _, y in
+            guard let onClose, !closing, y < -90 else { return }
+            closing = true
+            onClose()
+        }
+        .opacity(contentVisible ? 1 : 0)
+        .background(BlurredBackdrop(film: film).opacity(contentVisible ? 1 : 0))
+        .overlay(alignment: .topTrailing) {
+            if let onClose {
+                Button { closing = true; onClose() } label: {
+                    Image(systemName: "xmark").font(.body.weight(.semibold))
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .glassEffect(.regular.interactive(), in: .circle)
+                .padding(.trailing, 16).padding(.top, 4)
+                .opacity(contentVisible ? 1 : 0)
+                .accessibilityLabel("Schließen")
+            }
+        }
         .presentationDragIndicator(.visible)
         .filmPlayer($playing, in: playerNS)
         .task {
@@ -84,7 +116,9 @@ struct FilmDetailView: View {
                 .containerRelativeFrame(.horizontal) { w, _ in min(w * 0.62, 320) }
                 .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.white.opacity(0.12), lineWidth: 0.5))
                 .shadow(color: .black.opacity(0.5), radius: 18, y: 10)
-            .padding(.top, 36)
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { onPosterFrame?($0) }
+                .opacity(posterHidden ? 0 : 1)
+            .padding(.top, onClose == nil ? 36 : 56)
 
             laurels
                 .padding(.top, 26)
@@ -98,10 +132,12 @@ struct FilmDetailView: View {
                         .font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
                 }
                 Text(film.title)
-                    .font(.system(size: 34, weight: .semibold, design: .serif))
+                    .font(Self.titleFont)
                     .multilineTextAlignment(.center)
                     .lineLimit(3).minimumScaleFactor(0.75)
                     .fixedSize(horizontal: false, vertical: true)
+                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { onTitleFrame?($0) }
+                    .opacity(posterHidden ? 0 : 1)
                 HStack(spacing: 7) {
                     Text(film.yearText)
                     Text("·")
@@ -132,6 +168,49 @@ struct FilmDetailView: View {
                 .padding(.horizontal, 20)
                 .padding(.top, 24)
         }
+    }
+
+    /// Die Redaktion wie auf einem Kinoplakat zur Award-Saison: das Cover als Bühne,
+    /// rechts darauf fett der Blickwinkel, darunter der Satz.
+    private func editorial(_ voices: [Film.Voice]) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Die Redaktion meint").font(.title3.weight(.bold))
+            VStack(alignment: .trailing, spacing: 16) {
+                ForEach(voices, id: \.self) { v in
+                    VStack(alignment: .trailing, spacing: 3) {
+                        Text("\(v.label):")
+                            .font(.subheadline.weight(.bold))
+                        Text("„\(v.text)“")
+                            .font(.system(size: 18, design: .serif))
+                            .multilineTextAlignment(.trailing)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .padding(.vertical, 22).padding(.trailing, 20).padding(.leading, 70)
+            .background {
+                // Das Cover füllt die ganze Fläche, wie das Foto auf einem Kinoplakat.
+                Color(white: 0.12)
+                    .overlay {
+                        if let image = film.posterImage {
+                            Image(uiImage: image).resizable().scaledToFill()
+                        }
+                    }
+                    .overlay(LinearGradient(colors: [.black.opacity(0.15), .black.opacity(0.88)],
+                                            startPoint: .leading, endPoint: .trailing))
+            }
+            .clipShape(.rect(cornerRadius: 22))
+            .overlay(RoundedRectangle(cornerRadius: 22).strokeBorder(.white.opacity(0.1), lineWidth: 0.5))
+            HStack(spacing: 4) {
+                Text("Ausgewählt von unserer Redaktion ·")
+                Link("Kritiken lesen", destination: URL(string: "https://www.rottentomatoes.com/search?search=\(query)")!)
+                    .fontWeight(.semibold)
+            }
+            .font(.caption).foregroundStyle(.secondary).tint(.secondary)
+        }
+        .accessibilityElement(children: .contain)
     }
 
     /// Kritiken im Vokabular des Kinoplakats: Lorbeerkranz, Zahl, Quelle. Antippen öffnet die Quelle.
@@ -213,12 +292,19 @@ struct FilmDetailView: View {
                     withAnimation(.snappy) { store.toggleWatchlist(film) }
                     bookmarkBounce += 1
                 } label: {
-                    Label(store.isOnWatchlist(film) ? "Gemerkt" : (film.comingSoon ? "Erinnern" : "Merken"),
-                          systemImage: store.isOnWatchlist(film) ? "bookmark.fill" : "bookmark")
-                        .font(.subheadline.weight(.semibold))
-                        .contentTransition(.symbolEffect(.replace))
-                        .symbolEffect(.bounce, value: bookmarkBounce)
-                        .frame(maxWidth: .infinity, minHeight: 46)
+                    // Platz für das längste Wort reservieren, sonst springt das Symbol,
+                    // wenn „Merken“ zu „Gemerkt“ wird.
+                    HStack(spacing: 6) {
+                        Image(systemName: store.isOnWatchlist(film) ? "bookmark.fill" : "bookmark")
+                            .contentTransition(.symbolEffect(.replace))
+                            .symbolEffect(.bounce, value: bookmarkBounce)
+                        ZStack(alignment: .leading) {
+                            Text(film.comingSoon ? "Erinnern" : "Gemerkt").hidden()
+                            Text(store.isOnWatchlist(film) ? "Gemerkt" : (film.comingSoon ? "Erinnern" : "Merken"))
+                        }
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity, minHeight: 46)
                 }
                 .buttonStyle(.plain)
                 .glassEffect(.regular.interactive(), in: .capsule)

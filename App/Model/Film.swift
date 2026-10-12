@@ -39,6 +39,15 @@ struct Film: Codable, Identifiable, Hashable, Sendable {
     var endYear: Int? = nil
     var totalSeasons: Int? = nil
     var seasons: [Season]? = nil
+    /// Eigener Einzeiler der Redaktion für die Vorschlagskarte, wo der erste Satz der Beschreibung zu blass ist.
+    var tagline: String? = nil
+    /// Kurze Stimmen der Film-Redaktion, Blickwinkel und Satz, spoilerfrei.
+    var voices: [Voice]? = nil
+
+    struct Voice: Codable, Hashable, Sendable {
+        let label: String
+        let text: String
+    }
 
     var isSeries: Bool { kind == "series" }
 
@@ -57,15 +66,18 @@ struct Film: Codable, Identifiable, Hashable, Sendable {
         + cast.prefix(2).map { ("c:\($0)", 0.4) }
     }
 
-    /// Ein Satz, der neugierig macht: der erste Satz der handgeschriebenen, spoilerfreien Beschreibung.
-    /// Genau ein Satz für die Vorschlagskarte: der erste Satz der Beschreibung.
-    /// Abkürzungen („Dr.“, „P. T.“) beenden keinen Satz.
+    /// Genau ein Satz für die Vorschlagskarte, der neugierig macht: der eigene Einzeiler der Redaktion,
+    /// sonst der erste Satz der Beschreibung. Abkürzungen („Dr.“) und Zahlen („19. Jahrhundert“)
+    /// beenden keinen Satz. Sternchen sind absichtlich geschwärzte Wörter (siehe `RedactedText`).
     var hook: String {
+        if let tagline, !tagline.isEmpty { return tagline }
         let s = synopsis.trimmingCharacters(in: .whitespacesAndNewlines)
         let abbreviations: Set<String> = ["dr", "mr", "mrs", "ms", "st", "nr", "jr", "sr", "prof", "ca", "vs", "bzw"]
         for end in s.matches(of: /(\S+)[.!?](?=\s|$)/) {
             let word = end.output.1.lowercased()
-            if word.count > 1 && !abbreviations.contains(word) { return String(s[..<end.range.upperBound]) }
+            if word.count > 1 && !abbreviations.contains(word) && !word.allSatisfy(\.isNumber) {
+                return String(s[..<end.range.upperBound])
+            }
         }
         return s
     }

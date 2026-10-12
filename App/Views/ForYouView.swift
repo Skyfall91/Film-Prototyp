@@ -6,7 +6,8 @@ struct ForYouView: View {
     @State private var playing: PlaybackRequest?
     @Namespace private var zoom
     @State private var trigger: SwipeDirection?
-    @State private var detailFilm: Film?
+    /// Details öffnen sich als Morph über der ganzen App (siehe `HeroOverlay`).
+    @Environment(HeroCoordinator.self) private var hero
     @State private var addingProfile = false
     @State private var toast: Toast?
     @State private var undoBounce = 0
@@ -74,10 +75,6 @@ struct ForYouView: View {
                     .padding(.top, 54)
             }
         }
-        .sheet(item: $detailFilm) { film in
-            FilmDetailView(film: film)
-                .navigationTransition(.zoom(sourceID: film.id, in: zoom))
-        }
         .filmPlayer($playing, in: zoom)
         .fullScreenCover(isPresented: $addingProfile) {
             OnboardingFlow(mode: .addProfile, cancel: { addingProfile = false }) { id in
@@ -99,7 +96,7 @@ struct ForYouView: View {
         .task {
             if queue.isEmpty { rebuildQueue() }
             switch DemoScreen.current {
-            case "detail": detailFilm = UserDefaults.standard.string(forKey: "detailID").flatMap(FilmIndex.film) ?? recs.first?.film
+            case "detail": if let f = UserDefaults.standard.string(forKey: "detailID").flatMap(FilmIndex.film) ?? recs.first?.film { hero.show(f) }
             case "player": if let f = recs.first?.film { playing = PlaybackRequest(film: f, episode: store.upNext(f), countsAsWatched: true, sourceID: f.id) }
             case "rating": store.ratingToPresent = store.pendingRatings.last
             default: break
@@ -192,8 +189,12 @@ struct ForYouView: View {
             let width = min(geo.size.width, (geo.size.height - RecommendationCard.infoHeight) * 2 / 3)
             SwipeDeck(items: recs, options: options, trigger: $trigger,
                       onCommit: { rec, direction in handle(direction, rec.film) },
-                      onTap: { detailFilm = $0.film }) { rec, isTop in
-                RecommendationCard(rec: rec, compact: !isTop, width: width, viewers: store.activeProfileIDs.count)
+                      onTap: { hero.show($0.film) }) { rec, isTop in
+                RecommendationCard(rec: rec, compact: !isTop, width: width, viewers: store.activeProfileIDs.count,
+                                   heroHidden: hero.film?.id == rec.film.id,
+                                   onTitleFrame: { hero.cardTitleFrames[rec.film.id] = $0 })
+                    // Startpunkt für das fliegende Cover, in Bildschirmkoordinaten.
+                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { hero.cardFrames[rec.film.id] = $0 }
                     // Form explizit setzen, sonst zeigt die Quelle vor der ersten Zoom-Animation
                     // ein eckiges Rechteck hinter den runden Ecken.
                     .matchedTransitionSource(id: rec.film.id, in: zoom) { $0.clipShape(.rect(cornerRadius: 28)).background(.clear) }
@@ -278,7 +279,7 @@ struct ForYouView: View {
         if rec != nil { store.homeSwipeCount += 1 }
         switch direction {
         case .up:
-            detailFilm = film
+            hero.show(film)
         case .left:
             afterFlight { store.apply(.notToday, to: film) }
         case .right:
@@ -369,13 +370,24 @@ struct RecommendationCard: View {
     var width: CGFloat? = nil
     /// Wie viele zusammen schauen: Der Match gilt dann für alle gemeinsam.
     var viewers = 1
+    /// Cover und Titel fliegen gerade als eigene Ebene (Details öffnen sich): hier ausblenden.
+    var heroHidden = false
+    var onTitleFrame: ((CGRect) -> Void)? = nil
     @State private var shownMatch = 0
+
+    static let titleFont = Font.system(size: 36, weight: .heavy, design: .rounded)
+    static let shade = LinearGradient(stops: [.init(color: .black.opacity(0), location: 0),
+                                              .init(color: .black.opacity(0.75), location: 0.3),
+                                              .init(color: .black.opacity(0.88), location: 0.55),
+                                              .init(color: .black.opacity(0.95), location: 1)],
+                                      startPoint: .top, endPoint: .bottom)
 
     /// Alles liegt auf dem Poster, unter der Karte braucht es keinen Platz mehr.
     static let infoHeight: CGFloat = 0
 
     var body: some View {
         PosterView(film: rec.film, cornerRadius: 0)
+            .opacity(heroHidden ? 0 : 1)
             .overlay(alignment: .bottom) { cover }
             .frame(width: width)
             .background(Color(white: 0.1))
@@ -408,17 +420,23 @@ struct RecommendationCard: View {
                     .font(.subheadline).foregroundStyle(.white.opacity(0.7))
             }
             .lineLimit(1)
+            .opacity(heroHidden ? 0 : 1)
+            .animation(.easeOut(duration: 0.2), value: heroHidden)
 
             Text(rec.film.title)
-                .font(.system(size: 36, weight: .heavy, design: .rounded))
+                .font(RecommendationCard.titleFont)
                 .lineLimit(2).minimumScaleFactor(0.6)
                 .shadow(color: .black.opacity(0.5), radius: 8, y: 2)
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { onTitleFrame?($0) }
+                .opacity(heroHidden ? 0 : 1)
 
-            Text(rec.film.hook)
+            RedactedText(rec.film.hook)
                 .font(.callout)
                 .foregroundStyle(.white.opacity(0.88))
                 .lineLimit(compact ? 2 : 3)
                 .fixedSize(horizontal: false, vertical: true)
+                .opacity(heroHidden ? 0 : 1)
+                .animation(.easeOut(duration: 0.2), value: heroHidden)
 
         }
         .foregroundStyle(.white)
@@ -426,11 +444,7 @@ struct RecommendationCard: View {
         .padding(.horizontal, 20).padding(.bottom, 20).padding(.top, 90)
         .background {
             // Verlauf statt Kasten: Das Poster bleibt sichtbar, der Text trotzdem lesbar.
-            LinearGradient(stops: [.init(color: .black.opacity(0), location: 0),
-                                   .init(color: .black.opacity(0.75), location: 0.3),
-                                   .init(color: .black.opacity(0.88), location: 0.55),
-                                   .init(color: .black.opacity(0.95), location: 1)],
-                           startPoint: .top, endPoint: .bottom)
+            Self.shade
         }
     }
 }
@@ -509,5 +523,124 @@ struct RuntimeMenu<MenuLabel: View>: View {
 
     private func set(_ filter: RuntimeFilter) {
         withAnimation(.snappy) { store.runtimeFilter = filter }
+    }
+}
+
+// MARK: - Details als Morph
+
+/// Das Cover fliegt von der Karte an seinen Platz auf der Detailseite und zurück.
+/// Die Detailseite liegt über der ganzen App (auch über der Tab-Leiste), deshalb bleibt
+/// das Layout dahinter unverändert und Start- und Zielpunkt stimmen exakt.
+/// Beide Punkte werden in Bildschirmkoordinaten gemessen, das fliegende Cover ist eine eigene Ebene.
+@Observable @MainActor
+final class HeroCoordinator {
+    private(set) var film: Film?
+    private(set) var open = false
+    /// Das fliegende Cover, solange es unterwegs ist.
+    private(set) var ghost: Film?
+    var cardFrames: [String: CGRect] = [:]
+    var cardTitleFrames: [String: CGRect] = [:]
+    var detailFrame: CGRect = .zero
+    var detailTitleFrame: CGRect = .zero
+
+    func show(_ film: Film) {
+        guard self.film == nil else { return }
+        open = false
+        detailFrame = .zero
+        ghost = film
+        self.film = film
+        Task {
+            // Warten, bis die Detailseite steht und ihr Cover gemessen ist.
+            for _ in 0..<20 where detailFrame == .zero { try? await Task.sleep(for: .milliseconds(16)) }
+            withAnimation(.spring(response: 0.52, dampingFraction: 0.84)) { open = true }
+            try? await Task.sleep(for: .milliseconds(560))
+            if open { ghost = nil }
+        }
+    }
+
+    func close() {
+        guard let film, open, ghost == nil else { return }
+        ghost = film
+        Task {
+            // Erst einen Frame mit dem Cover an der Detailposition zeigen, dann losfliegen.
+            try? await Task.sleep(for: .milliseconds(20))
+            withAnimation(.spring(response: 0.46, dampingFraction: 0.88)) { open = false }
+            try? await Task.sleep(for: .milliseconds(460))
+            guard !open else { return }
+            // Gelandet: Cover und Titel der Karte übernehmen ohne Sprung, der Rest blendet ein.
+            self.film = nil
+            ghost = nil
+        }
+    }
+}
+
+struct HeroOverlay: View {
+    @Environment(HeroCoordinator.self) private var hero
+
+    var body: some View {
+        ZStack {
+            if let film = hero.film {
+                FilmDetailView(film: film, posterHidden: hero.ghost != nil, contentVisible: hero.open,
+                               onClose: hero.close, onPosterFrame: { hero.detailFrame = $0 },
+                               onTitleFrame: { hero.detailTitleFrame = $0 })
+            }
+            // Ganzer Bildschirm ohne Ränder: Hier entsprechen die Koordinaten denen der Messung.
+            GeometryReader { _ in
+                if let film = hero.ghost {
+                    let r = hero.open ? hero.detailFrame : (hero.cardFrames[film.id] ?? hero.detailFrame)
+                    PosterView(film: film, cornerRadius: 0, showsBadge: false)
+                        .frame(width: r.width, height: r.height)
+                        // Der Verlauf der Karte kommt mit, sonst springt er beim Landen auf.
+                        .overlay(alignment: .bottom) {
+                            RecommendationCard.shade
+                                .frame(height: r.height * 0.42)
+                                .opacity(hero.open ? 0 : 1)
+                        }
+                        .clipShape(.rect(cornerRadius: hero.open ? 14 : 28))
+                        .shadow(color: .black.opacity(0.5), radius: 18, y: 10)
+                        .position(x: r.midX, y: r.midY)
+                    // Der Titel fliegt mit und wechselt dabei die Schrift: Karte ↔ Detailseite.
+                    let t = hero.open ? hero.detailTitleFrame : (hero.cardTitleFrames[film.id] ?? hero.detailTitleFrame)
+                    ZStack {
+                        Text(film.title)
+                            .font(RecommendationCard.titleFont)
+                            .lineLimit(2).minimumScaleFactor(0.6)
+                            .shadow(color: .black.opacity(0.5), radius: 8, y: 2)
+                            .frame(width: hero.cardTitleFrames[film.id]?.width ?? t.width)
+                            .opacity(hero.open ? 0 : 1)
+                        Text(film.title)
+                            .font(FilmDetailView.titleFont)
+                            .multilineTextAlignment(.center)
+                            .lineLimit(3).minimumScaleFactor(0.75)
+                            .frame(width: hero.detailTitleFrame.width)
+                            .opacity(hero.open ? 1 : 0)
+                    }
+                    .foregroundStyle(.white)
+                    // Beide Schriften auf derselben Mitte, so verschmelzen sie statt doppelt zu stehen.
+                    .frame(width: t.width, height: t.height)
+                    .position(x: t.midX, y: t.midY)
+                }
+            }
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
+        }
+    }
+}
+
+/// Text, in dem Sternchen als Zensurbalken erscheinen: „über den ***** ****“.
+/// Für Einzeiler mit Insider-Witz, bei denen man lieber nichts verraten will.
+struct RedactedText: View {
+    let string: String
+    init(_ string: String) { self.string = string }
+
+    var body: some View {
+        var result = Text("")
+        var rest = Substring(string)
+        while let match = rest.firstMatch(of: /\*+/) {
+            result = result + Text(rest[..<match.range.lowerBound])
+                + Text(String(repeating: "█", count: match.output.count)).accessibilityLabel("geschwärzt")
+            rest = rest[match.range.upperBound...]
+        }
+        return result + Text(rest)
     }
 }
