@@ -370,6 +370,9 @@ struct RecommendationCard: View {
     /// Bereich für den Morph zu den Details. Cover und Titel fliegen dann als eigene Ebene,
     /// Match und Einzeiler blenden aus, solange die Details offen sind.
     var heroScope: String? = nil
+    /// Nur für die fliegende Ebene: gesetzt heißt „ich bin die Karte im Flug“, `true` = schon bei den Details.
+    var ghostOpen: Bool? = nil
+    var cornerRadius: CGFloat = 28
     @Environment(HeroCoordinator.self) private var hero
     private var lifted: Bool { heroScope.map { hero.isLifted(rec.film.id, in: $0) } ?? false }
     private var detailsUp: Bool { heroScope.map { hero.isShowingDetails(rec.film.id, in: $0) } ?? false }
@@ -386,23 +389,37 @@ struct RecommendationCard: View {
     static let infoHeight: CGFloat = 0
 
     var body: some View {
-        PosterView(film: rec.film, cornerRadius: 0)
-            .opacity(lifted ? 0 : 1)
-            .overlay(alignment: .bottom) { cover }
+        let atDetails = ghostOpen ?? false
+        PosterView(film: rec.film, cornerRadius: 0, showsBadge: ghostOpen == nil)
+            // Verlauf, Match, Laufzeit und Einzeiler blenden im Flug zum Detail-Cover aus und zurück ein.
+            .overlay(alignment: .bottom) { cover.opacity(atDetails ? 0 : 1) }
             .frame(width: width)
             .background(Color(white: 0.1))
-            .clipShape(.rect(cornerRadius: 28))
-            .modifier(OptionalHeroSource(film: rec.film, scope: heroScope))
-            .overlay(RoundedRectangle(cornerRadius: 28).strokeBorder(.white.opacity(0.08)))
+            .clipShape(.rect(cornerRadius: cornerRadius))
+            .overlay(RoundedRectangle(cornerRadius: cornerRadius).strokeBorder(.white.opacity(atDetails ? 0.12 : 0.08)))
+            // Während die Karte fliegt, bleibt hier nur ihr Schatten als Platzhalter.
+            .opacity(lifted ? 0 : 1)
+            .modifier(OptionalHeroSource(rec: rec, scope: heroScope))
             .animation(.smooth(duration: 0.3), value: compact)
-            .cardShadow()
+            .background {
+                if ghostOpen == nil {
+                    // Schatten der Karte; solange sie fliegt, trägt die fliegende Ebene ihn. Die Fläche bleibt
+                    // als Platzhalter und deckt die nächste Karte ab, bis die Detailseite darüber liegt.
+                    RoundedRectangle(cornerRadius: 28).fill(.black)
+                        .shadow(color: .black.opacity(lifted ? 0 : 0.5), radius: 24, y: 12)
+                        .opacity(detailsUp ? 0 : 1)
+                }
+            }
             .task(id: "\(rec.id)-\(rec.match)-\(viewers)") {
                 // Hinten liegende Karten zeigen den Wert gleich; nur die erste zählt sichtbar hoch.
-                guard !compact else { shownMatch = rec.match; return }
+                guard !compact, ghostOpen == nil else { shownMatch = rec.match; return }
                 try? await Task.sleep(for: .milliseconds(150))
                 withAnimation(.smooth(duration: 0.9)) { shownMatch = rec.match }
             }
     }
+
+    /// Die fliegende Karte zeigt den Wert gleich, sie soll nicht noch einmal hochzählen.
+    private var displayedMatch: Int { ghostOpen == nil ? shownMatch : rec.match }
 
     private var cover: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -411,18 +428,16 @@ struct RecommendationCard: View {
                     Label(rec.film.releaseNote ?? "Demnächst", systemImage: "calendar")
                         .font(.subheadline.weight(.heavy))
                 } else {
-                    Text(viewers > 1 ? "\(shownMatch) % für euch \(viewers == 2 ? "beide" : "\(viewers)")" : "\(shownMatch) % Match")
+                    Text(viewers > 1 ? "\(displayedMatch) % für euch \(viewers == 2 ? "beide" : "\(viewers)")" : "\(displayedMatch) % Match")
                         .font(.subheadline.weight(.heavy))
                         .monospacedDigit()
-                        .contentTransition(.numericText(value: Double(shownMatch)))
+                        .contentTransition(.numericText(value: Double(displayedMatch)))
                         .foregroundStyle(Color.match(rec.match))
                 }
                 Text(rec.film.isSeries ? "\(rec.film.yearText) · \(rec.film.seasonsText)" : "\(String(rec.film.year)) · \(rec.film.runtimeText)")
                     .font(.subheadline).foregroundStyle(.white.opacity(0.7))
             }
             .lineLimit(1)
-            .opacity(detailsUp ? 0 : 1)
-            .animation(.easeOut(duration: 0.22), value: detailsUp)
 
             Text(rec.film.title)
                 .font(RecommendationCard.titleFont)
@@ -431,15 +446,14 @@ struct RecommendationCard: View {
                 .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
                     if let heroScope { hero.titleFrames[HeroCoordinator.key(rec.film.id, heroScope)] = frame }
                 }
-                .opacity(lifted ? 0 : 1)
+                // Der Titel fliegt als eigene Ebene und wechselt dabei die Schrift.
+                .opacity(ghostOpen == nil ? 1 : 0)
 
             RedactedText(rec.film.hook)
                 .font(.callout)
                 .foregroundStyle(.white.opacity(0.88))
                 .lineLimit(compact ? 2 : 3)
                 .fixedSize(horizontal: false, vertical: true)
-                .opacity(detailsUp ? 0 : 1)
-                .animation(.easeOut(duration: 0.22), value: detailsUp)
 
         }
         .foregroundStyle(.white)
@@ -539,7 +553,12 @@ struct RuntimeMenu<MenuLabel: View>: View {
 final class HeroCoordinator {
     /// Woher ein Cover losfliegt: Rahmen, Ecken und ob es eine Vorschlagskarte ist
     /// (dann fliegen Verlauf und Titel mit).
-    struct Source { var frame: CGRect; var radius: CGFloat; var card: Bool }
+    struct Source {
+        var frame: CGRect
+        var radius: CGFloat
+        var rec: Recommendation?
+        var card: Bool { rec != nil }
+    }
 
     private(set) var film: Film?
     /// Bereich, aus dem die Details geöffnet wurden. Derselbe Film kann an mehreren Stellen stehen.
@@ -622,17 +641,17 @@ final class HeroCoordinator {
 
 extension View {
     /// Macht ein Cover zum Startpunkt des Morphs: misst seine Lage und blendet es aus, solange es fliegt.
-    func heroSource(_ film: Film, in scope: String, cornerRadius: CGFloat, card: Bool = false) -> some View {
-        modifier(HeroSourceModifier(film: film, scope: scope, radius: cornerRadius, card: card))
+    func heroSource(_ film: Film, in scope: String, cornerRadius: CGFloat) -> some View {
+        modifier(HeroSourceModifier(film: film, scope: scope, radius: cornerRadius))
     }
 }
 
 /// Karten ohne Bereich (z. B. Vorschau) messen nichts.
 private struct OptionalHeroSource: ViewModifier {
-    let film: Film
+    let rec: Recommendation
     let scope: String?
     func body(content: Content) -> some View {
-        if let scope { content.heroSource(film, in: scope, cornerRadius: 28, card: true) } else { content }
+        if let scope { content.modifier(HeroSourceModifier(film: rec.film, scope: scope, radius: 28, rec: rec)) } else { content }
     }
 }
 
@@ -641,22 +660,30 @@ private struct HeroSourceModifier: ViewModifier {
     let film: Film
     let scope: String
     let radius: CGFloat
-    let card: Bool
+    /// Gesetzt bei Vorschlagskarten: Dann fliegt die ganze Karte mit Verlauf und Text.
+    var rec: Recommendation? = nil
+
+    /// Letzte Lage merken: Nach einem Tabwechsel meldet sich die Geometrie nicht neu,
+    /// wenn sich nichts bewegt hat. Ohne Merken gäbe es dann keinen Startpunkt mehr.
+    @State private var frame: CGRect?
 
     func body(content: Content) -> some View {
         let key = HeroCoordinator.key(film.id, scope)
         content
-            // Die Karte versteckt Cover und Titel selbst, ihr Rahmen und Text bleiben stehen.
-            .opacity(!card && hero.isLifted(film.id, in: scope) ? 0 : 1)
+            // Die Karte versteckt sich selbst und lässt ihren Schatten als Platzhalter stehen.
+            .opacity(rec == nil && hero.isLifted(film.id, in: scope) ? 0 : 1)
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: {
-                hero.sources[key] = .init(frame: $0, radius: radius, card: card)
+                frame = $0
+                hero.sources[key] = .init(frame: $0, radius: radius, rec: rec)
             }
+            .onAppear { if let frame { hero.sources[key] = .init(frame: frame, radius: radius, rec: rec) } }
             .onDisappear { hero.sources[key] = nil }
     }
 }
 
 struct HeroOverlay: View {
     @Environment(HeroCoordinator.self) private var hero
+    @Environment(AppStore.self) private var store
 
     var body: some View {
         let source = hero.source
@@ -673,19 +700,34 @@ struct HeroOverlay: View {
             GeometryReader { _ in
                 if let film = hero.ghost, let source {
                     let r = hero.open ? hero.detailFrame : source.frame
-                    PosterView(film: film, cornerRadius: 0, showsBadge: false)
+                    // Schatten wie am jeweiligen Ort: Karte groß und weich, Detail-Cover etwas enger,
+                    // kleine Listen-Cover ohne. Er wandert stufenlos mit.
+                    RoundedRectangle(cornerRadius: hero.open ? 14 : source.radius)
+                        .fill(.black)
                         .frame(width: r.width, height: r.height)
-                        // Der Verlauf der Karte kommt mit, sonst springt er beim Landen auf.
-                        .overlay(alignment: .bottom) {
-                            if source.card {
-                                RecommendationCard.shade
-                                    .frame(height: r.height * 0.42)
-                                    .opacity(hero.open ? 0 : 1)
-                            }
-                        }
-                        .clipShape(.rect(cornerRadius: hero.open ? 14 : source.radius))
-                        .shadow(color: .black.opacity(0.5), radius: 18, y: 10)
+                        .shadow(color: .black.opacity(hero.open || source.card ? 0.5 : 0),
+                                radius: hero.open ? 18 : 24, y: hero.open ? 10 : 12)
                         .position(x: r.midX, y: r.midY)
+                    if let rec = source.rec {
+                        // Die ganze Karte fliegt: in Kartengröße gezeichnet und auf die aktuelle Größe skaliert,
+                        // so sitzen Verlauf und Text genau wie auf der Karte. Die Ecken enden bei 14 pt am Ziel.
+                        let s = source.frame.size
+                        let scale = r.width / max(s.width, 1)
+                        let detailScale = max(hero.detailFrame.width / max(s.width, 1), 0.01)
+                        RecommendationCard(rec: rec, width: s.width, viewers: store.activeProfileIDs.count,
+                                           ghostOpen: hero.open,
+                                           cornerRadius: hero.open ? 14 / detailScale : source.radius)
+                            .frame(width: s.width, height: s.height)
+                            .scaleEffect(scale)
+                            .position(x: r.midX, y: r.midY)
+                    } else {
+                        PosterView(film: film, cornerRadius: 0, showsBadge: false)
+                            .frame(width: r.width, height: r.height)
+                            .clipShape(.rect(cornerRadius: hero.open ? 14 : source.radius))
+                            .overlay(RoundedRectangle(cornerRadius: hero.open ? 14 : source.radius)
+                                .strokeBorder(.white.opacity(hero.open ? 0.12 : 0), lineWidth: 0.5))
+                            .position(x: r.midX, y: r.midY)
+                    }
                     // Der Titel fliegt mit und wechselt dabei die Schrift: Karte ↔ Detailseite.
                     if let cardTitle = titleSource {
                         let t = hero.open ? hero.detailTitleFrame : cardTitle
