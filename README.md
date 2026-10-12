@@ -14,6 +14,7 @@ Du musst nichts über Programmieren wissen. Mach einfach einen Schritt nach dem 
 - [✅ Bevor du anfängst](#-bevor-du-anfängst)
 - [💻 Teil 1: Auf dem Mac ausprobieren](#-teil-1-auf-dem-mac-ausprobieren) (hier anfangen)
 - [📱 Teil 2: Auf dein iPhone bringen](#-teil-2-auf-dein-iphone-bringen)
+- [🔄 Neue Version holen](#-neue-version-holen)
 - [🆘 Wenn etwas nicht klappt](#-wenn-etwas-nicht-klappt)
 
 ---
@@ -178,6 +179,25 @@ Mach zuerst **Teil 1 bis Schritt 4**.
 
 ---
 
+## 🔄 Neue Version holen
+
+*Gibt es eine neue Version, tauschst du einfach den Ordner aus. Dein Konto, deine Profile und Bewertungen bleiben erhalten.*
+
+1. Xcode ganz schließen (**⌘ cmd** + **Q**).
+2. Den alten Ordner **Film-Prototyp** und die alte **`Film-Prototyp.zip`** in den **Papierkorb** ziehen.
+3. Die neue Version laden: **[⬇️ Film-Prototyp.zip herunterladen](https://github.com/Skyfall91/Film-Prototyp/releases/latest/download/Film-Prototyp.zip)**
+4. Weiter wie in **Teil 1, Schritt 3 bis 5**: auspacken, **`FilmPrototyp.xcodeproj`** öffnen, **▶** klicken.
+
+**Auf dem iPhone** machst du danach noch einmal **Teil 2, Schritt 2** und dann **Schritt 5**. Schritt 1, 3 und 4 sind schon erledigt.
+
+> [!IMPORTANT]
+> Trag beim **Bundle Identifier** genau **denselben** Namen ein wie beim ersten Mal. Dann ersetzt Xcode die alte App auf dem iPhone. Bei einem neuen Namen hast du die App zweimal, und die neue fängt bei null an.
+
+> [!TIP]
+> Dein Konto liegt online. Selbst wenn etwas schiefgeht: einfach mit deiner E-Mail und deinem Passwort wieder anmelden, dann ist alles wieder da.
+
+---
+
 ## 🆘 Wenn etwas nicht klappt
 
 | Was du siehst | Was du tust |
@@ -222,12 +242,12 @@ SwiftUI, iOS 26, Xcode 26 oder neuer. Signiert wird mit dem Personal Team, daher
 | Bereich | Was passiert |
 |---|---|
 | Konto | Online-Konten über Supabase (Server in Frankfurt): Registrieren und Anmelden mit E-Mail und Passwort, der Stand (Profile, Bewertungen, Merkliste) liegt je Konto online und kommt auf jedem Gerät per Login zurück. Jedes Konto sieht nur seine eigenen Daten (Row Level Security). Ohne Netz zählt die Konten-Datenbank auf dem Gerät (SwiftData). Abmelden, Konto löschen online und auf dem Gerät (DSGVO) |
-| Abo | Tarife Solo / Duo / Familie (Profile, gleichzeitige Geräte, Zusammen-Modus; 4K in allen). Abo-Wahl nach dem Geschmacksprofil, 7 Tage gratis, Demo-Kauf ohne Zahlungsdaten, Tarif wechseln/kündigen. Ohne Abo: Trailer und Vorschläge ja, Abspielen nein |
+| Abo | Tarife Solo / Duo / Familie (2 / 4 / 8 Profile, 1 / 2 / 4 gleichzeitige Geräte, Zusammen-Modus ab Duo; 4K in allen). Bei einem Downgrade werden überzählige Profile pausiert, nicht gelöscht, und lassen sich gegen ein aktives tauschen. Abo-Wahl nach dem Geschmacksprofil, 7 Tage gratis, Demo-Kauf ohne Zahlungsdaten, Tarif wechseln/kündigen. Ohne Abo: Trailer und Vorschläge ja, Abspielen nein |
 | Wer schaut? | Startbildschirm bei mehreren Profilen, mehrere antippen = Zusammen-Modus |
 | Profil erstellen | Avatar-Galerie nach Genres, Name, Kinderprofil mit FSK-Stufe |
 | Serien | 48 Serien mit Staffeln und Folgen, „Weiterschauen“ pro Profil, Filter Film/Serie auf der Startseite und im Katalog |
 | Onboarding | Profil → bekannte Filme swipen (← nicht meins, → mag ich, ↑ Lieblingsfilm, ↓ nicht gesehen) → optional Letterboxd/IMDb-CSV importieren → Geschmacksprofil (Satz von Apple Intelligence) |
-| Für dich | Ein Vorschlag mit Match-% und Begründung. ← heute nicht · → merken · ↓ schon gesehen · ↑ Details · Rückgängig-Button · Zeitfilter |
+| Für dich | Ein Vorschlag mit Match-% („für euch beide“ im Zusammen-Modus) und genau einem Satz zum Film, die Begründung steht in den Details. ← heute nicht · → merken · ↓ schon gesehen · ↑ Details · Rückgängig-Button · Zeitfilter |
 | Profilwahl | Liquid-Glass-Menü wie bei Apple TV: mehrere Profile gleichzeitig wählen (Zusammen-Modus, „least misery“, strengste FSK), Profil erstellen |
 | Profil | Geschmacksprofil, „Weiter swipen“ zum Verfeinern, Chat mit Apple Intelligence („Musicals nerven mich, ruhige Sci-Fi liebe ich“) |
 | Bewertung | Nach dem Schauen bewertet jedes Profil einzeln (4 Stufen + optional Review) |
@@ -235,6 +255,7 @@ SwiftUI, iOS 26, Xcode 26 oder neuer. Signiert wird mit dem Personal Team, daher
 | Wiedergabe | „Abspielen“ = Trailer als Film, im nativen iOS-Player (AVPlayerViewController, 1080p, dreht ins Querformat). YouTube-Stream wird per YouTubeKit aufgelöst |
 | Trailer-Auswahl | Pro Film bis zu 4 offizielle Trailer (Studio-Kanäle, deutsch zuerst, sonst OV), keine KinoCheck-Uploads |
 | Bewertungen | IMDb, Rotten Tomatoes und Metacritic auf Karte und Liste, in den Details als Links (plus Letterboxd) |
+| SharePlay | Knopf in den Details mit Vorschau, wie gemeinsames Schauen aussähe. Nur angedeutet: echtes SharePlay braucht das bezahlte Entwicklerprogramm |
 | Katalog / Merkliste | bewusst als Nebenweg |
 
 ### Architektur (für die Modellierung)
