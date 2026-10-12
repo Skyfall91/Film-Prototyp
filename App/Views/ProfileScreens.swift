@@ -224,8 +224,8 @@ struct ProfileEditor: View {
                 ForEach(quickPicks.isEmpty ? Self.makeQuickPicks(including: art) : quickPicks) { a in
                     Button { withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) { art = a } } label: {
                         AvatarTile(art: a, size: 56)
-                            .overlay(RoundedRectangle(cornerRadius: 56 * 0.24, style: .continuous)
-                                .stroke(.white, lineWidth: a == art ? 2.5 : 0).padding(-4))
+                            .overlay(RoundedRectangle(cornerRadius: 56 * 0.24 + 5, style: .continuous)
+                                .strokeBorder(.white, lineWidth: 2.5).padding(-5).opacity(a == art ? 1 : 0))
                             .scaleEffect(a == art ? 1 : 0.9)
                     }
                     .buttonStyle(.plain)
@@ -412,8 +412,8 @@ struct AvatarPicker: View {
                                             dismiss()
                                         } label: {
                                             AvatarTile(art: a, size: 96)
-                                                .overlay(RoundedRectangle(cornerRadius: 96 * 0.24, style: .continuous)
-                                                    .stroke(.white, lineWidth: a == selection ? 3 : 0).padding(-5))
+                                                .overlay(RoundedRectangle(cornerRadius: 96 * 0.24 + 6, style: .continuous)
+                                                    .strokeBorder(.white, lineWidth: 3).padding(-6).opacity(a == selection ? 1 : 0))
                                         }
                                         .buttonStyle(.plain)
                                         .accessibilityLabel("\(c.name): \(a.emoji)")
@@ -562,8 +562,9 @@ struct WhoIsWatchingView: View {
         } label: {
             VStack(spacing: 10) {
                 AvatarTile(art: profile.avatarArt, initial: profile.initial, color: profile.color, size: 120)
-                    .overlay(RoundedRectangle(cornerRadius: 120 * 0.24, style: .continuous)
-                        .stroke(.white, lineWidth: on ? 3 : 0).padding(-5))
+                    // Rahmen mit gleichem Abstand rundum: Radius = Icon-Radius + Abstand, Linie nach innen.
+                    .overlay(RoundedRectangle(cornerRadius: 120 * 0.24 + 7, style: .continuous)
+                        .strokeBorder(.white, lineWidth: 3).padding(-7).opacity(on ? 1 : 0))
                     .overlay(alignment: .topTrailing) {
                         if on {
                             Image(systemName: "checkmark.circle.fill")

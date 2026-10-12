@@ -47,6 +47,10 @@ struct ForYouView: View {
                 emptyState
             } else {
                 deck(recs)
+                    // Neue Runde, wenn sich ändert, wer schaut: Die Karte legt sich sichtbar neu hin,
+                    // auch wenn derselbe Film für alle zusammen wieder der beste ist.
+                    .id(store.activeProfileIDs)
+                    .transition(.asymmetric(insertion: .scale(scale: 0.92).combined(with: .opacity), removal: .opacity))
                 if store.homeSwipeCount < 3 {
                     SwipeLegend(options: options)
                         .transition(.opacity.combined(with: .move(edge: .bottom)))
@@ -189,7 +193,7 @@ struct ForYouView: View {
             SwipeDeck(items: recs, options: options, trigger: $trigger,
                       onCommit: { rec, direction in handle(direction, rec.film) },
                       onTap: { detailFilm = $0.film }) { rec, isTop in
-                RecommendationCard(rec: rec, compact: !isTop, width: width)
+                RecommendationCard(rec: rec, compact: !isTop, width: width, viewers: store.activeProfileIDs.count)
                     // Form explizit setzen, sonst zeigt die Quelle vor der ersten Zoom-Animation
                     // ein eckiges Rechteck hinter den runden Ecken.
                     .matchedTransitionSource(id: rec.film.id, in: zoom) { $0.clipShape(.rect(cornerRadius: 28)).background(.clear) }
@@ -363,6 +367,8 @@ struct RecommendationCard: View {
     let rec: Recommendation
     var compact = false
     var width: CGFloat? = nil
+    /// Wie viele zusammen schauen: Der Match gilt dann für alle gemeinsam.
+    var viewers = 1
     @State private var shownMatch = 0
 
     /// Alles liegt auf dem Poster, unter der Karte braucht es keinen Platz mehr.
@@ -377,7 +383,7 @@ struct RecommendationCard: View {
             .overlay(RoundedRectangle(cornerRadius: 28).strokeBorder(.white.opacity(0.08)))
             .animation(.smooth(duration: 0.3), value: compact)
             .cardShadow()
-            .task(id: rec.id) {
+            .task(id: "\(rec.id)-\(rec.match)-\(viewers)") {
                 // Hinten liegende Karten zeigen den Wert gleich; nur die erste zählt sichtbar hoch.
                 guard !compact else { shownMatch = rec.match; return }
                 try? await Task.sleep(for: .milliseconds(150))
@@ -392,7 +398,7 @@ struct RecommendationCard: View {
                     Label(rec.film.releaseNote ?? "Demnächst", systemImage: "calendar")
                         .font(.subheadline.weight(.heavy))
                 } else {
-                    Text("\(shownMatch) % Match")
+                    Text(viewers > 1 ? "\(shownMatch) % für euch \(viewers == 2 ? "beide" : "\(viewers)")" : "\(shownMatch) % Match")
                         .font(.subheadline.weight(.heavy))
                         .monospacedDigit()
                         .contentTransition(.numericText(value: Double(shownMatch)))
