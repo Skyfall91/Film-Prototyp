@@ -11,6 +11,7 @@ struct FilmDetailView: View {
     @State private var shownMatch = 0
     @State private var aiTeaser: String?
     @State private var bookmarkBounce = 0
+    @State private var sharePlay = false
 
     var body: some View {
         let rec = store.recommendation(for: film)
@@ -222,8 +223,19 @@ struct FilmDetailView: View {
                 .buttonStyle(.plain)
                 .glassEffect(.regular.interactive(), in: .capsule)
                 .sensoryFeedback(.success, trigger: bookmarkBounce)
+                if !film.comingSoon {
+                    Button { sharePlay = true } label: {
+                        Image(systemName: "shareplay")
+                            .font(.subheadline.weight(.semibold))
+                            .frame(width: 46, height: 46)
+                    }
+                    .buttonStyle(.plain)
+                    .glassEffect(.regular.interactive(), in: .circle)
+                    .accessibilityLabel("Mit SharePlay schauen")
+                }
             }
         }
+        .sheet(isPresented: $sharePlay) { SharePlaySheet(film: film) }
     }
 
     private var playTitle: String {
@@ -430,5 +442,64 @@ struct RatingSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
+    }
+}
+
+// MARK: - SharePlay (Prototyp)
+
+/// Zusammen schauen über FaceTime. Im Prototyp nur angedeutet: Echtes SharePlay braucht eine
+/// Berechtigung aus dem bezahlten Apple-Entwicklerprogramm. Mit ihr würde der Player per
+/// GroupActivities und AVPlaybackCoordinator bei allen gleichzeitig laufen.
+struct SharePlaySheet: View {
+    @Environment(AppStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+    let film: Film
+    @State private var ready = false
+
+    var body: some View {
+        VStack(spacing: 22) {
+            Image(systemName: ready ? "checkmark.circle.fill" : "shareplay")
+                .font(.system(size: 54, weight: .semibold))
+                .foregroundStyle(ready ? Color.green : store.accent)
+                .contentTransition(.symbolEffect(.replace))
+                .padding(.top, 28)
+            VStack(spacing: 8) {
+                Text(ready ? "Bereit für SharePlay" : "Zusammen schauen")
+                    .font(.title2.weight(.bold))
+                    .contentTransition(.opacity)
+                Text(ready
+                     ? "„\(film.title)“ startet bei allen, sobald ihr in einem FaceTime-Anruf seid."
+                     : "Ruf jemanden per FaceTime an. „\(film.title)“ läuft dann bei allen gleichzeitig, Pause und Spulen gelten für alle.")
+                    .font(.subheadline).foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .contentTransition(.opacity)
+            }
+            .padding(.horizontal, 24)
+            HStack(spacing: 14) {
+                PosterView(film: film, cornerRadius: 8, showsBadge: false).frame(width: 44)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(film.title).font(.headline).lineLimit(1)
+                    Text("Alle brauchen ein eigenes Abo").font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+            .padding(12)
+            .background(.white.opacity(0.06), in: .rect(cornerRadius: 16))
+            .padding(.horizontal, 24)
+            Spacer(minLength: 0)
+            Button {
+                if ready { dismiss() } else { withAnimation(.smooth) { ready = true } }
+            } label: {
+                Text(ready ? "Fertig" : "SharePlay starten")
+                    .font(.headline).foregroundStyle(.black)
+                    .frame(maxWidth: .infinity, minHeight: 52)
+            }
+            .buttonStyle(.plain)
+            .glassEffect(.regular.tint(store.accent).interactive(), in: .capsule)
+            .padding(.horizontal, 24).padding(.bottom, 12)
+            .sensoryFeedback(.success, trigger: ready)
+        }
+        .presentationDetents([.medium])
+        .presentationDragIndicator(.visible)
     }
 }
