@@ -15,12 +15,16 @@ struct FilmDetailView: View {
     /// Morph von „Für dich“: Das Cover fliegt als eigene Ebene herein (`HeroOverlay`), solange
     /// bleibt das echte Cover hier unsichtbar und liefert nur die Zielposition.
     var posterHidden = false
+    /// Nur wenn der Titel von einer Karte mitfliegt.
+    var titleHidden = false
     var contentVisible = true
     var onClose: (() -> Void)? = nil
     var onPosterFrame: ((CGRect) -> Void)? = nil
     var onTitleFrame: ((CGRect) -> Void)? = nil
     static let titleFont = Font.system(size: 34, weight: .semibold, design: .serif)
     @State private var closing = false
+    /// Vom linken Rand wischen: Die Seite schrumpft unter dem Finger und fliegt dann zurück.
+    @State private var edgeDrag: CGFloat = 0
 
     var body: some View {
         let rec = store.recommendation(for: film)
@@ -81,8 +85,13 @@ struct FilmDetailView: View {
             closing = true
             onClose()
         }
+        .scaleEffect(1 - edgeProgress * 0.14, anchor: .center)
+        .offset(x: edgeDrag * 0.35)
         .opacity(contentVisible ? 1 : 0)
-        .background(BlurredBackdrop(film: film).opacity(contentVisible ? 1 : 0))
+        .background(BlurredBackdrop(film: film).opacity(contentVisible ? 1 - edgeProgress * 0.35 : 0))
+        // Beim Schließen schnell weg, damit Match und Einzeiler der Karte schon während des Flugs da sind.
+        .animation(contentVisible ? .easeOut(duration: 0.35) : .easeOut(duration: 0.18), value: contentVisible)
+        .simultaneousGesture(edgeSwipe, isEnabled: onClose != nil && !closing)
         .overlay(alignment: .topTrailing) {
             if let onClose {
                 Button { closing = true; onClose() } label: {
@@ -96,7 +105,6 @@ struct FilmDetailView: View {
                 .accessibilityLabel("Schließen")
             }
         }
-        .presentationDragIndicator(.visible)
         .filmPlayer($playing, in: playerNS)
         .task {
             try? await Task.sleep(for: .milliseconds(250))
@@ -105,6 +113,26 @@ struct FilmDetailView: View {
                 withAnimation(.smooth) { aiTeaser = t }
             }
         }
+    }
+
+    private var edgeProgress: CGFloat { min(max(edgeDrag, 0) / 320, 1) }
+
+    /// Zurück wie in jeder iOS-App: am linken Rand ansetzen und nach rechts ziehen.
+    private var edgeSwipe: some Gesture {
+        DragGesture(minimumDistance: 12, coordinateSpace: .global)
+            .onChanged { value in
+                guard value.startLocation.x < 44, value.translation.width > abs(value.translation.height) * 0.6 || edgeDrag > 0 else { return }
+                edgeDrag = max(value.translation.width, 0)
+            }
+            .onEnded { value in
+                guard edgeDrag > 0 else { return }
+                if edgeDrag > 110 || value.predictedEndTranslation.width > 260 {
+                    closing = true
+                    onClose?()
+                } else {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { edgeDrag = 0 }
+                }
+            }
     }
 
     /// Das Cover ist die Lichtquelle der Seite: groß in der Mitte, sein eigener Schein fällt in den Raum.
@@ -137,7 +165,7 @@ struct FilmDetailView: View {
                     .lineLimit(3).minimumScaleFactor(0.75)
                     .fixedSize(horizontal: false, vertical: true)
                     .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { onTitleFrame?($0) }
-                    .opacity(posterHidden ? 0 : 1)
+                    .opacity(titleHidden ? 0 : 1)
                 HStack(spacing: 7) {
                     Text(film.yearText)
                     Text("·")

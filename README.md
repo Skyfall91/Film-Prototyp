@@ -181,7 +181,7 @@ Mach zuerst **Teil 1 bis Schritt 4**.
 
 ## 🔄 Neue Version holen
 
-*Gibt es eine neue Version, tauschst du einfach den Ordner aus. Dein Konto, deine Profile und Bewertungen bleiben erhalten.*
+*Gibt es eine neue Version, tauschst du einfach den Ordner aus. Dein Konto, deine Profile und Bewertungen bleiben erhalten. Der Download-Link liefert immer automatisch den neuesten Stand.*
 
 1. Xcode ganz schließen (**⌘ cmd** + **Q**).
 2. Den alten Ordner **Film-Prototyp** und die alte **`Film-Prototyp.zip`** in den **Papierkorb** ziehen.

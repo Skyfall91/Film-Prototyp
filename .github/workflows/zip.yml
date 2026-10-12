@@ -1,0 +1,25 @@
+# Hält den Download-Link im README immer aktuell: Nach jedem Push auf main wird
+# Film-Prototyp.zip neu gepackt und in der neuesten Release ersetzt.
+name: ZIP aktuell halten
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  zip:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: ZIP packen
+        run: git archive --format=zip --prefix=Film-Prototyp/ -o Film-Prototyp.zip HEAD
+      - name: In der neuesten Release ersetzen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(gh release view --json tagName -q .tagName)
+          gh release upload "$tag" Film-Prototyp.zip --clobber

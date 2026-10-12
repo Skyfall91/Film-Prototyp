@@ -108,6 +108,8 @@ struct SwipeCard<Content: View>: View {
     @State private var offset: CGSize = .zero
     @State private var armed = false
     @State private var flying = false
+    /// „Details“: Das Cover ist gerade als eigene Ebene losgeflogen, die Karte bleibt kurz liegen, wo sie ist.
+    @State private var handedOff = false
 
     private let threshold: CGFloat = 110
 
@@ -159,7 +161,7 @@ struct SwipeCard<Content: View>: View {
     var body: some View {
         content()
             .overlay {
-                if isActive || isDeparting {
+                if (isActive || isDeparting) && !handedOff {
                     ZStack {
                         ForEach(SwipeDirection.allCases, id: \.self) { d in
                             if let option = options[d] { tint(option, strength(d), armed: armed && direction == d) }
@@ -241,8 +243,17 @@ struct SwipeCard<Content: View>: View {
     private func commit(_ direction: SwipeDirection, velocity: CGSize) {
         guard let option = options[direction] else { return }
         guard option.flyOut else {
-            withAnimation(Self.settle) { offset = .zero; onProgress(0) }
+            // Nicht zurückfedern: Das Cover startet genau dort, wo der Finger die Karte losgelassen hat.
+            // Erst wenn die Details den Bildschirm bedecken, rückt die Karte unsichtbar zurück.
+            handedOff = true
             onCommit(direction, 0)
+            Task {
+                // Nach dem Einblenden der Details (0,4 s), vor dem frühesten Zurückfliegen (0,6 s).
+                try? await Task.sleep(for: .milliseconds(480))
+                var t = Transaction(); t.disablesAnimations = true
+                withTransaction(t) { offset = .zero; handedOff = false }
+                onProgress(0)
+            }
             return
         }
         flying = true

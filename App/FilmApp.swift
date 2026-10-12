@@ -86,6 +86,10 @@ struct MainTabs: View {
             Tab("Suche", systemImage: "magnifyingglass", value: 4, role: .search) { MoodSearchView() }
         }
         .tabBarMinimizeBehavior(.onScrollDown)
+        // Solange Details offen sind, darf kein Tipper zu Knöpfen darunter durchrutschen
+        // (z. B. Filtermenü genau unter dem Schließen-Knopf).
+        .allowsHitTesting(hero.film == nil)
+        .accessibilityHidden(hero.film != nil)
         .overlay { HeroOverlay() }
         .environment(hero)
         .sheet(item: Bindable(store).ratingToPresent) { RatingSheet(pending: $0) }

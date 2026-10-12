@@ -8,8 +8,7 @@ struct MoodSearchView: View {
     @State private var result: MoodResult?
     @State private var searching = false
     @FocusState private var fieldFocused: Bool
-    @State private var detailFilm: Film?
-    @Namespace private var zoom
+    @Environment(HeroCoordinator.self) private var hero
 
     private let suggestions = [
         "Was Lustiges unter 2 Stunden",
@@ -49,9 +48,6 @@ struct MoodSearchView: View {
                 if let q = UserDefaults.standard.string(forKey: "moodQuery"), result == nil { text = q; run(q) }
             }
             .background(BlurredBackdrop(film: result?.films.first?.film))
-        }
-        .sheet(item: $detailFilm) { film in
-            FilmDetailView(film: film).navigationTransition(.zoom(sourceID: film.id, in: zoom))
         }
     }
 
@@ -116,17 +112,16 @@ struct MoodSearchView: View {
         }
 
         if let top = r.films.first {
-            Button { detailFilm = top.film } label: {
-                RecommendationCard(rec: top)
-                    .matchedTransitionSource(id: top.film.id, in: zoom) { $0.clipShape(.rect(cornerRadius: 28)).background(.clear) }
+            Button { hero.show(top.film, from: "search-top") } label: {
+                RecommendationCard(rec: top, heroScope: "search-top")
                     .frame(maxWidth: 360).frame(maxWidth: .infinity)
             }
             .buttonStyle(.plain)
             .transition(.scale(scale: 0.92).combined(with: .opacity))
             Text("Weitere Treffer").font(.headline).padding(.top, 6)
             ForEach(Array(r.films.dropFirst().enumerated()), id: \.element.id) { i, rec in
-                Button { detailFilm = rec.film } label: {
-                    FilmRow(rec: rec).matchedTransitionSource(id: rec.film.id, in: zoom)
+                Button { hero.show(rec.film, from: "search") } label: {
+                    FilmRow(rec: rec, heroScope: "search")
                 }
                 .buttonStyle(.plain)
                 .scrollTransition(.animated) { view, phase in
@@ -161,9 +156,18 @@ struct MoodSearchView: View {
 
 struct FilmRow: View {
     let rec: Recommendation
+    /// Bereich für den Morph zu den Details; dann fliegt das kleine Cover groß auf.
+    var heroScope: String? = nil
     var body: some View {
         HStack(spacing: 14) {
-            PosterView(film: rec.film, cornerRadius: 10).frame(width: 64)
+            Group {
+                if let heroScope {
+                    PosterView(film: rec.film, cornerRadius: 10).frame(width: 64)
+                        .heroSource(rec.film, in: heroScope, cornerRadius: 10)
+                } else {
+                    PosterView(film: rec.film, cornerRadius: 10).frame(width: 64)
+                }
+            }
             VStack(alignment: .leading, spacing: 4) {
                 Text(rec.film.title).font(.headline).lineLimit(2)
                 Text(rec.film.metaLine).font(.caption).foregroundStyle(.secondary)
@@ -184,8 +188,7 @@ struct CatalogView: View {
     @Environment(AppStore.self) private var store
     @State private var genre: String?
     @State private var kind = 0
-    @State private var detailFilm: Film?
-    @Namespace private var zoom
+    @Environment(HeroCoordinator.self) private var hero
 
     private var maxFSK: Int { store.activeProfiles.map(\.maxFSK).min() ?? 18 }
     private func allowed(_ film: Film) -> Bool { store.activeProfiles.allSatisfy { $0.allows(film) } }
@@ -210,9 +213,9 @@ struct CatalogView: View {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 12) {
                                 ForEach(soon) { film in
-                                    Button { detailFilm = film } label: {
+                                    Button { hero.show(film, from: "catalog-soon") } label: {
                                         PosterView(film: film, cornerRadius: 14).frame(width: 150)
-                                            .matchedTransitionSource(id: film.id, in: zoom)
+                                            .heroSource(film, in: "catalog-soon", cornerRadius: 14)
                                     }
                                     .buttonStyle(.plain)
                                     .scrollTransition(axis: .horizontal) { view, phase in
@@ -232,9 +235,9 @@ struct CatalogView: View {
                     .scrollClipDisabled()
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 105), spacing: 12)], spacing: 14) {
                         ForEach(films) { film in
-                            Button { detailFilm = film } label: {
+                            Button { hero.show(film, from: "catalog") } label: {
                                 PosterView(film: film, cornerRadius: 12)
-                                    .matchedTransitionSource(id: film.id, in: zoom)
+                                    .heroSource(film, in: "catalog", cornerRadius: 12)
                             }
                             .buttonStyle(.plain)
                             .scrollTransition { view, phase in
@@ -257,7 +260,6 @@ struct CatalogView: View {
             .toolbarTitleDisplayMode(.inlineLarge)
             .navigationBarTitleDisplayMode(.inline)
         }
-        .sheet(item: $detailFilm) { film in FilmDetailView(film: film).navigationTransition(.zoom(sourceID: film.id, in: zoom)) }
     }
 
     @Namespace private var chipNS
@@ -284,8 +286,7 @@ struct CatalogView: View {
 
 struct WatchlistView: View {
     @Environment(AppStore.self) private var store
-    @State private var detailFilm: Film?
-    @Namespace private var zoom
+    @Environment(HeroCoordinator.self) private var hero
 
     var body: some View {
         NavigationStack {
@@ -304,11 +305,11 @@ struct WatchlistView: View {
                                 ScrollView(.horizontal, showsIndicators: false) {
                                     HStack(spacing: 12) {
                                         ForEach(store.continueWatching, id: \.film.id) { item in
-                                            Button { detailFilm = item.film } label: {
+                                            Button { hero.show(item.film, from: "continue") } label: {
                                                 VStack(alignment: .leading, spacing: 6) {
                                                     PosterView(film: item.film, cornerRadius: 12, showsBadge: false)
                                                         .frame(width: 120)
-                                                        .matchedTransitionSource(id: item.film.id, in: zoom)
+                                                        .heroSource(item.film, in: "continue", cornerRadius: 12)
                                                     Text(item.film.title).font(.subheadline.weight(.semibold)).lineLimit(1)
                                                     Text("Weiter mit \(item.next.short)").font(.caption).foregroundStyle(store.accent)
                                                 }
@@ -324,8 +325,8 @@ struct WatchlistView: View {
                                 }
                             }
                             ForEach(store.watchlist) { film in
-                                Button { detailFilm = film } label: {
-                                    FilmRow(rec: store.recommendation(for: film)).matchedTransitionSource(id: film.id, in: zoom)
+                                Button { hero.show(film, from: "watchlist") } label: {
+                                    FilmRow(rec: store.recommendation(for: film), heroScope: "watchlist")
                                 }
                                     .buttonStyle(.plain)
                                     .transition(.asymmetric(insertion: .opacity, removal: .move(edge: .leading).combined(with: .opacity)))
@@ -352,7 +353,6 @@ struct WatchlistView: View {
                 }
             }
         }
-        .sheet(item: $detailFilm) { film in FilmDetailView(film: film).navigationTransition(.zoom(sourceID: film.id, in: zoom)) }
     }
 }
 
