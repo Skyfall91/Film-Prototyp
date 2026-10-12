@@ -41,6 +41,8 @@ struct TasteChatView: View {
     @State private var openQuestion: TasteQuestion?
     @State private var multiSelection: Set<String> = []
     @State private var scaleValue: Double = 0
+    /// Wie oft hintereinander „Keins von beiden“: Dann passen die Entweder-oder-Fragen gerade nicht.
+    @State private var rejections = 0
     @FocusState private var focused: Bool
 
     private var profile: Profile? { store.profiles.first { $0.id == profileID } }
@@ -106,7 +108,9 @@ struct TasteChatView: View {
                 if !m.fromUser { Spacer(minLength: 50) }
             }
             if !m.learned.isEmpty {
-                HStack(spacing: 6) { ForEach(m.learned, id: \.self) { TagChip(text: $0) } }
+                // Umbrechen statt quetschen: Jeder Chip bleibt eine Zeile, notfalls in mehreren Reihen.
+                WrapLayout(spacing: 6) { ForEach(m.learned, id: \.self) { TagChip(text: $0).fixedSize() } }
+                    .frame(maxWidth: .infinity, alignment: m.fromUser ? .trailing : .leading)
             }
             if let q = m.question, q == openQuestion {
                 answerArea(q)
@@ -255,8 +259,17 @@ struct TasteChatView: View {
     private func askNext() {
         guard let profile else { return }
         let history = TasteQuestions.asked(for: profileID)
+        // Zweimal „Keins von beiden“: nicht weiter raten, sondern offen fragen.
+        if rejections >= 2 {
+            rejections = 0
+            withAnimation(.smooth) {
+                openQuestion = nil
+                messages.append(ChatMessage(fromUser: false, text: "Okay, beides trifft's nicht. Worauf hast du stattdessen Lust? Ein Film, eine Stimmung oder ein Name reicht."))
+            }
+            return
+        }
         if let q = TasteQuestions.next(for: profile, asked: Set(history))
-            ?? SituationQuestions.next(for: profile, asked: Set(history)) {
+            ?? SituationQuestions.next(for: profile, history: history) {
             present(q); return
         }
         withAnimation(.smooth) {
@@ -274,6 +287,7 @@ struct TasteChatView: View {
     }
 
     private func answer(_ q: TasteQuestion, _ a: TasteQuestion.Answer) {
+        rejections = a.label == SituationQuestions.neither ? rejections + 1 : 0
         commit(label: a.label, affinity: a.affinity)
     }
 
@@ -311,7 +325,7 @@ struct TasteChatView: View {
         store.save()
         withAnimation(.smooth) {
             openQuestion = nil
-            messages.append(ChatMessage(fromUser: true, text: label, learned: chips))
+            messages.append(ChatMessage(fromUser: true, text: label, learned: chips.uniqued))
         }
         Task {
             try? await Task.sleep(for: .milliseconds(450))
@@ -342,7 +356,7 @@ struct TasteChatView: View {
                 : (update.reply.isEmpty ? "Notiert. Das fließt ab jetzt in deine Vorschläge ein." : update.reply.withoutDashes)
             withAnimation(.smooth) {
                 thinking = false
-                messages.append(ChatMessage(fromUser: false, text: reply, learned: learned))
+                messages.append(ChatMessage(fromUser: false, text: reply, learned: learned.uniqued))
             }
             try? await Task.sleep(for: .milliseconds(600))
             askNext()
@@ -456,5 +470,13 @@ struct TasteChatView: View {
             liked.append(!negativeWords.contains { text.lowercased().contains($0) })
         }
         return TasteUpdate(likes: Array(Set(likes)), dislikes: Array(Set(dislikes)), reply: "", filmTitles: titles, filmLiked: liked)
+    }
+}
+
+private extension Array where Element: Hashable {
+    /// Reihenfolge behalten, Doppelte weglassen („+ Lustig“ nur einmal).
+    var uniqued: [Element] {
+        var seen = Set<Element>()
+        return filter { seen.insert($0).inserted }
     }
 }

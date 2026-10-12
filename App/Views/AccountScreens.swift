@@ -483,7 +483,7 @@ struct PlanPicker: View {
                     }
                 }
                 if tooSmall {
-                    Text("Ihr habt schon \(store.profiles.count) Profile, in \(plan.name) könnt ihr nur eines nutzen.")
+                    Text("Ihr habt \(store.profiles.count) Profile, in \(plan.name) \(plan.maxProfiles == 1 ? "ist eines" : "sind \(plan.maxProfiles)") aktiv. Die übrigen werden pausiert, gelöscht wird nichts.")
                         .font(.caption).foregroundStyle(.orange)
                 }
             }
@@ -791,7 +791,9 @@ struct AccountView: View {
                             Text(sub.plan.features.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary)
                         }
                         .padding(.vertical, 4)
-                        LabeledContent("Profile", value: "\(store.profiles.count) von \(sub.plan.maxProfiles)")
+                        LabeledContent("Profile", value: store.pausedProfileIDs.isEmpty
+                                       ? "\(store.profiles.count) von \(sub.plan.maxProfiles)"
+                                       : "\(sub.plan.maxProfiles) aktiv, \(store.pausedProfileIDs.count) pausiert")
                         LabeledContent("Zahlung", value: sub.source == .appStore ? "App Store" : "Demo-Kauf (ohne Abbuchung)")
                         Button("Tarif ändern", systemImage: "arrow.up.arrow.down") { changing = true }
                         if sub.canceled {

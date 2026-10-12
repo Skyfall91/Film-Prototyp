@@ -445,6 +445,9 @@ struct WhoIsWatchingView: View {
     @State private var selected: [UUID] = []
     @State private var adding = false
     @State private var appeared = false
+    /// Angetipptes pausiertes Profil (nach Wechsel in einen kleineren Tarif).
+    @State private var paused: Profile?
+    @State private var changingPlan = false
 
     var body: some View {
         let plan = store.subscription?.plan
@@ -508,6 +511,29 @@ struct WhoIsWatchingView: View {
             appeared = true
         }
         .sensoryFeedback(.selection, trigger: selected)
+        .confirmationDialog(pausedTitle, isPresented: Binding(get: { paused != nil }, set: { if !$0 { paused = nil } }),
+                            titleVisibility: .visible, presenting: paused) { profile in
+            ForEach(store.profiles.filter { !store.isPaused($0.id) }) { active in
+                Button("Statt \(active.name) aktiv schalten") {
+                    withAnimation(.smooth) {
+                        store.unpause(profile.id, replacing: active.id)
+                        selected = selected.map { $0 == active.id ? profile.id : $0 }
+                        if selected.isEmpty { selected = [profile.id] }
+                    }
+                }
+            }
+            Button("Tarif ändern") { changingPlan = true }
+            Button("Abbrechen", role: .cancel) {}
+        } message: { _ in
+            Text("Alles bleibt gespeichert: Geschmack, Merkliste, Bewertungen.")
+        }
+        .sheet(isPresented: $changingPlan) { PlanPicker(mode: .upgrade) { _ in changingPlan = false } }
+    }
+
+    private var pausedTitle: String {
+        let plan = store.subscription?.plan
+        let n = plan?.maxProfiles ?? 1
+        return "\(paused?.name ?? "Profil") ist pausiert. Im Tarif \(plan?.name ?? "") \(n == 1 ? "ist 1 Profil" : "sind \(n) Profile") aktiv."
     }
 
     private var buttonTitle: String {
@@ -521,7 +547,9 @@ struct WhoIsWatchingView: View {
 
     private func tile(_ profile: Profile) -> some View {
         let on = selected.contains(profile.id)
+        let isPaused = store.isPaused(profile.id)
         return Button {
+            if isPaused { paused = profile; return }
             withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
                 if store.subscription?.plan.allowsTogether == false {
                     selected = [profile.id]
@@ -553,16 +581,27 @@ struct WhoIsWatchingView: View {
                                 .padding(8)
                         }
                     }
+                    .overlay {
+                        if isPaused {
+                            Image(systemName: "lock.fill")
+                                .font(.title.weight(.semibold))
+                                .frame(width: 120, height: 120)
+                                .background(.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 120 * 0.24, style: .continuous))
+                        }
+                    }
                     .scaleEffect(on ? 1.04 : 1)
-                    .saturation(on || selected.isEmpty ? 1 : 0.55)
+                    .saturation(isPaused ? 0 : (on || selected.isEmpty ? 1 : 0.55))
                     .opacity(on || selected.isEmpty ? 1 : 0.7)
-                Text(profile.name)
-                    .font(.headline)
-                    .foregroundStyle(on ? .primary : .secondary)
+                VStack(spacing: 2) {
+                    Text(profile.name)
+                        .font(.headline)
+                        .foregroundStyle(on ? .primary : .secondary)
+                    if isPaused { Text("Pausiert").font(.caption).foregroundStyle(.secondary) }
+                }
             }
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(profile.name)
+        .accessibilityLabel(isPaused ? "\(profile.name), pausiert" : profile.name)
         .accessibilityAddTraits(on ? .isSelected : [])
     }
 }

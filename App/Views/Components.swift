@@ -1,3 +1,4 @@
+import CoreImage
 import SwiftUI
 
 // MARK: - Poster
@@ -165,6 +166,26 @@ extension View {
 /// Unscharfer Poster-Hintergrund für Detail- und Startseiten.
 /// Wechsel ohne dunkles Zwischenbild: Das neue Bild blendet *über* dem alten ein,
 /// erst danach verschwindet das alte.
+/// Unschärfe einmal vorab auf das kleine Vorschaubild rechnen statt live in jedem Frame.
+/// Sonst muss die GPU beim Wischen zwei bildschirmgroße Ebenen gleichzeitig weichzeichnen.
+enum BackdropBlur {
+    private static var cache: [String: UIImage] = [:]
+    private static let context = CIContext(options: [.useSoftwareRenderer: false])
+
+    static func image(_ filmID: String) -> UIImage? {
+        if let cached = cache[filmID] { return cached }
+        guard let thumb = FilmIndex.film(filmID)?.posterThumbnail, let cg = thumb.cgImage else { return nil }
+        let input = CIImage(cgImage: cg)
+        guard let blurred = input.clampedToExtent().applyingGaussianBlur(sigma: Double(input.extent.width) / 14)
+                .cropped(to: input.extent) as CIImage?,
+              let out = context.createCGImage(blurred, from: input.extent) else { return thumb }
+        let image = UIImage(cgImage: out)
+        if cache.count > 40 { cache.removeAll() }
+        cache[filmID] = image
+        return image
+    }
+}
+
 struct BlurredBackdrop: View {
     let film: Film?
 
@@ -178,14 +199,13 @@ struct BlurredBackdrop: View {
         ZStack {
             Color.black
             ForEach([layer], id: \.generation) { l in
-                if let id = l.filmID, let image = FilmIndex.film(id)?.posterThumbnail {
+                if let id = l.filmID, let image = BackdropBlur.image(id) {
                     // Color.clear legt die Größe fest, das Bild darf das Layout nicht aufblähen.
                     // Jede Ebene ist deckend (Bild auf Schwarz), so verdeckt die neue die alte
                     // vollständig, und beim Entfernen der alten ändert sich nichts mehr.
                     Color.black.overlay {
                         Image(uiImage: image)
-                            .resizable().interpolation(.medium).scaledToFill()
-                            .blur(radius: 30)
+                            .resizable().interpolation(.high).scaledToFill()
                             .opacity(0.55)
                             .scaleEffect(1.3)
                     }
@@ -345,13 +365,15 @@ struct ProfileMenu<MenuLabel: View>: View {
                     Toggle(isOn: binding(for: profile)) {
                         Label {
                             Text(profile.name)
-                            Text(profile.isKid ? profile.ageLabel : "\(profile.signalCount) Geschmackssignale")
+                            Text(store.isPaused(profile.id) ? "Pausiert, nicht im Tarif enthalten"
+                                 : profile.isKid ? profile.ageLabel : "\(profile.signalCount) Geschmackssignale")
                         } icon: {
                             Image(uiImage: AvatarImage.render(profile))
                         }
                     }
                     // Mehrere Profile hintereinander antippen, ohne dass das Menü zugeht.
                     .menuActionDismissBehavior(.disabled)
+                    .disabled(store.isPaused(profile.id))
                 }
             }
             Section {

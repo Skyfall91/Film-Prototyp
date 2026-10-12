@@ -99,6 +99,19 @@ final class AppStore {
     var canPlay: Bool { subscription?.isActive == true }
     var profileLimit: Int { subscription?.plan.maxProfiles ?? Plan.familie.maxProfiles }
     var canAddProfile: Bool { profiles.count < profileLimit }
+    /// Nach einem Wechsel in einen kleineren Tarif: Profile über dem Limit bleiben mit allem
+    /// erhalten, sind aber pausiert, bis wieder Platz ist. Aktiv sind die ersten in der Liste.
+    var pausedProfileIDs: Set<UUID> { Set(profiles.dropFirst(profileLimit).map(\.id)) }
+    func isPaused(_ id: UUID) -> Bool { pausedProfileIDs.contains(id) }
+
+    /// Pausiertes Profil aktiv schalten, dafür wird `replacing` pausiert (tauschen die Plätze).
+    func unpause(_ id: UUID, replacing other: UUID) {
+        guard let i = profiles.firstIndex(where: { $0.id == id }),
+              let j = profiles.firstIndex(where: { $0.id == other }) else { return }
+        profiles.swapAt(i, j)
+        activeProfileIDs = activeProfileIDs.map { $0 == other ? id : $0 }
+        save()
+    }
 
     /// Neues Konto, online bei Supabase, damit es auf jedem Gerät klappt.
     /// Ohne Netz wird es erst nur auf diesem Gerät angelegt und beim nächsten Anmelden online nachgeholt.
@@ -203,8 +216,11 @@ final class AppStore {
 
     func subscribe(_ sub: Subscription) {
         account?.subscription = sub
-        // Weniger Profile im neuen Tarif: nichts löschen, nur nicht mehr gleichzeitig schauen.
+        // Weniger Profile im neuen Tarif: nichts löschen. Überzählige Profile werden pausiert,
+        // und wer nicht mehr zusammen schauen darf, schaut allein weiter.
+        activeProfileIDs.removeAll { isPaused($0) }
         if !sub.plan.allowsTogether, activeProfileIDs.count > 1 { activeProfileIDs = Array(activeProfileIDs.prefix(1)) }
+        if activeProfileIDs.isEmpty, let first = profiles.first { activeProfileIDs = [first.id] }
         save()
     }
 
@@ -221,7 +237,7 @@ final class AppStore {
     }
 
     func chooseViewers(_ ids: [UUID]) {
-        activeProfileIDs = profiles.map(\.id).filter(ids.contains)
+        activeProfileIDs = profiles.map(\.id).filter { ids.contains($0) && !isPaused($0) }
         hasChosenViewers = true
         skippedToday = []
         save()
@@ -483,8 +499,30 @@ final class AppStore {
         URL.applicationSupportDirectory.appending(path: "state.json")
     }
 
+    /// Änderungen wirken sofort (tasteRevision), geschrieben wird kurz gesammelt danach.
+    /// So hakt beim Wischen nichts, weil Datei und Datenbank nicht mitten in der Animation schreiben.
     func save(signedInNow: Bool = false) {
         tasteRevision += 1
+        persistTask?.cancel()
+        if signedInNow { persist(signedInNow: true); return }
+        persistTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(700))
+            guard !Task.isCancelled else { return }
+            self?.persist()
+        }
+    }
+
+    /// Sofort schreiben, was noch aussteht (z. B. wenn die App in den Hintergrund geht).
+    func flush() {
+        guard let task = persistTask, !task.isCancelled else { return }
+        task.cancel()
+        persist()
+    }
+
+    private var persistTask: Task<Void, Never>?
+
+    private func persist(signedInNow: Bool = false) {
+        persistTask = nil
         let snap = Snapshot(profiles: profiles, activeProfileIDs: activeProfileIDs,
                             onboardingDone: onboardingDone, pendingRatings: pendingRatings,
                             account: account, signedIn: signedIn)
@@ -510,6 +548,7 @@ final class AppStore {
 
     /// Sofort hochladen (vor Abmelden oder Kontowechsel).
     private func pushNow() {
+        flush()
         guard let session = cloudSession, account != nil,
               let data = try? JSONEncoder().encode(Snapshot(profiles: profiles, activeProfileIDs: activeProfileIDs,
                                                             onboardingDone: onboardingDone, pendingRatings: pendingRatings,

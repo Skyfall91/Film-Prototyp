@@ -51,11 +51,13 @@ enum Plan: String, Codable, CaseIterable, Identifiable, Sendable {
     }
     var maxProfiles: Int {
         switch self {
-        case .solo: 1
-        case .duo: 3
-        case .familie: 6
+        case .solo: 2
+        case .duo: 4
+        case .familie: 8
         }
     }
+    /// Gegen Account-Sharing zählen gleichzeitige Geräte, nicht Profile: Lieber jedem im Haushalt
+    /// ein eigenes Profil geben (bessere Vorschläge), als dass sich Leute ein Profil teilen.
     var streams: Int {
         switch self {
         case .solo: 1
@@ -65,7 +67,8 @@ enum Plan: String, Codable, CaseIterable, Identifiable, Sendable {
     }
     /// Bildqualität ist kein Verkaufsargument für teurere Tarife, 4K gibt es in jedem.
     var quality: String { "4K · HDR" }
-    var allowsTogether: Bool { maxProfiles > 1 }
+    /// Zusammen-Modus gibt es ab Duo. Solo hat ein zweites Profil, z. B. für Kinder oder Gäste.
+    var allowsTogether: Bool { self != .solo }
     var productID: String { "de.beispiel.filmprototyp.abo.\(rawValue)" }
 
     var features: [String] {

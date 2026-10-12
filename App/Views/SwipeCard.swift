@@ -48,14 +48,15 @@ struct SwipeDeck<Item: Identifiable, Card: View>: View {
                     trigger: index == 0 ? $trigger : .constant(nil),
                     isActive: index == 0,
                     isDeparting: index == -1,
-                    onProgress: { if index == 0 { progress = $0 } },
+                    onProgress: { if index == 0, abs(progress - $0) > 0.004 || $0 == 0 { progress = $0 } },
                     onCommit: { direction, flight in
                         guard options[direction]?.flyOut != false else {
                             onCommit(item, direction); return
                         }
                         departing.append(item)
-                        // Nachrücken läuft parallel zum Wegfliegen.
-                        withAnimation(.smooth(duration: max(flight, 0.32))) {
+                        // Nachrücken läuft parallel zum Wegfliegen und federt kurz nach,
+                        // so spürt man, dass die neue Karte „landet“.
+                        withAnimation(Self.advance) {
                             progress = 0
                             onCommit(item, direction)
                         }
@@ -78,11 +79,15 @@ struct SwipeDeck<Item: Identifiable, Card: View>: View {
         }
     }
 
+    /// Federnd mit etwas Schwung, damit das Nachrücken lebendig wirkt, aber nicht wackelt.
+    private static var advance: Animation { .spring(response: 0.5, dampingFraction: 0.72) }
+
     // Hintere Karten rücken anteilig zum Ziehfortschritt der vorderen nach vorne.
-    private func lift(_ index: Int) -> CGFloat { max(CGFloat(index) - min(progress, 1), 0) }
-    private func scale(for index: Int) -> CGFloat { index <= 0 ? 1 : 1 - lift(index) * 0.06 }
-    private func yOffset(for index: Int) -> CGFloat { index <= 0 ? 0 : lift(index) * 18 }
-    private func opacity(for index: Int) -> Double { index <= 0 ? 1 : Double(1 - lift(index) * 0.4) }
+    // Beim Ziehen kommt die nächste Karte nur ein Stück, den Rest macht sie beim Loslassen mit Schwung.
+    private func lift(_ index: Int) -> CGFloat { max(CGFloat(index) - min(progress, 1) * 0.6, 0) }
+    private func scale(for index: Int) -> CGFloat { index <= 0 ? 1 : 1 - lift(index) * 0.08 }
+    private func yOffset(for index: Int) -> CGFloat { index <= 0 ? 0 : lift(index) * 26 }
+    private func opacity(for index: Int) -> Double { index <= 0 ? 1 : Double(1 - lift(index) * 0.45) }
 }
 
 /// Karte, die in vier Richtungen gewischt werden kann. Beim Ziehen färbt sie sich
@@ -252,13 +257,14 @@ struct SwipeCard<Content: View>: View {
         var dir = length > 30 ? CGVector(dx: offset.width / length, dy: offset.height / length) : axis
         // Nie mehr als ~40° von der gewählten Achse abweichen.
         if dir.dx * axis.dx + dir.dy * axis.dy < 0.75 { dir = axis }
-        let travel: CGFloat = 1100
+        let travel: CGFloat = 1300
         let target = CGSize(width: offset.width + dir.dx * travel, height: offset.height + dir.dy * travel)
-        // Schwung aus der Geste übernehmen: schneller Wisch = schneller Abflug.
-        let speed = max(hypot(velocity.width, velocity.height), 1000)
-        let duration = Double(min(max(travel / speed, 0.28), 0.42))
-        // Linear, damit Tempo und Richtung beim Loslassen erhalten bleiben.
-        withAnimation(.linear(duration: duration)) { offset = target }
+        // Schwung aus der Geste übernehmen: Die Karte startet genau so schnell, wie der Finger war,
+        // und läuft erst außerhalb des Bildschirms aus. Kein Ruck beim Loslassen.
+        let speed = min(max(hypot(velocity.width, velocity.height), 1400), 4000)
+        let duration = Double(min(max(travel / speed * 1.25, 0.32), 0.5))
+        let startSlope = min(Double(speed) * duration / Double(travel), 3)
+        withAnimation(.timingCurve(0.25, 0.25 * startSlope, 0.6, 1, duration: duration)) { offset = target }
         onCommit(direction, duration)
     }
 

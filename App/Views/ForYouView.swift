@@ -20,6 +20,8 @@ struct ForYouView: View {
     @State private var stale = false
     /// Die Änderung kam von hier (Swipe, Rückgängig): Die oberste Karte bleibt liegen.
     @State private var ownChange = false
+    /// Gewischt, aber noch nicht gelernt (läuft, sobald die Karte weggeflogen ist).
+    @State private var pendingWork: [(id: UUID, work: () -> Void)] = []
 
     struct Toast: Equatable {
         var text: String
@@ -128,6 +130,7 @@ struct ForYouView: View {
             Spacer()
 
             Button {
+                runPendingWork()
                 ownChange = true
                 withAnimation(.snappy) { store.undo() }
                 if let last = swiped.popLast() {
@@ -252,11 +255,16 @@ struct ForYouView: View {
         queue.removeAll { $0.id == rec.id }
         swiped.append(rec)
         if swiped.count > 20 { swiped.removeFirst() }
-        let known = Set(queue.map(\.id)).union([rec.id])
-        for next in store.recommendations(limit: 10) where queue.count < 4 && !known.contains(next.id) {
-            queue.append(next)
+        // Hinten auffüllen erst nach dem Abflug, die nächsten drei Karten liegen ja schon bereit.
+        Task {
+            try? await Task.sleep(for: .milliseconds(420))
+            guard queue.count < 4 else { return }
+            let known = Set(queue.map(\.id)).union(swiped.map(\.id))
+            for next in store.recommendations(limit: 10) where queue.count < 4 && !known.contains(next.id) {
+                queue.append(next)
+            }
+            PosterCache.warmUp(queue.map(\.film.id))
         }
-        PosterCache.warmUp(queue.map(\.film.id))
     }
 
     private func handle(_ direction: SwipeDirection, _ film: Film) {
@@ -268,14 +276,33 @@ struct ForYouView: View {
         case .up:
             detailFilm = film
         case .left:
-            store.apply(.notToday, to: film)
+            afterFlight { store.apply(.notToday, to: film) }
         case .right:
-            store.apply(.watchlist, to: film)
+            afterFlight { store.apply(.watchlist, to: film) }
             show("Auf der Merkliste", "bookmark.circle.fill", SwipeAction.watchlist.color)
         case .down:
-            store.apply(.alreadySeen, to: film)
+            afterFlight { store.apply(.alreadySeen, to: film) }
             show(film.isSeries ? "Wie fandest du sie? Oben bewerten" : "Wie fandest du ihn? Oben bewerten", "star.circle.fill", .yellow)
         }
+    }
+
+    /// Lernen und Neusortieren erst, wenn die Karte weg ist: Während sie fliegt,
+    /// bekommt die Animation die volle Rechenzeit.
+    private func afterFlight(_ work: @escaping () -> Void) {
+        let id = UUID()
+        pendingWork.append((id, work))
+        Task {
+            try? await Task.sleep(for: .milliseconds(380))
+            guard let i = pendingWork.firstIndex(where: { $0.id == id }) else { return }
+            pendingWork.remove(at: i).work()
+        }
+    }
+
+    /// Noch ausstehendes Lernen sofort erledigen (z. B. vor „Rückgängig“).
+    private func runPendingWork() {
+        let work = pendingWork
+        pendingWork = []
+        work.forEach { $0.work() }
     }
 
     private func show(_ text: String, _ symbol: String, _ color: Color) {

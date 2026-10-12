@@ -4,6 +4,7 @@ import SwiftUI
 struct FilmApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var store = AppStore()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
@@ -12,6 +13,7 @@ struct FilmApp: App {
                 .preferredColorScheme(.dark)
                 .tint(store.accent)
                 .task(priority: .utility) { await PosterCache.prefetchAll(FilmIndex.all.map(\.id)) }
+                .onChange(of: scenePhase) { _, phase in if phase != .active { store.flush() } }
         }
     }
 }

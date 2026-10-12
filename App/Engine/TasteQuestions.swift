@@ -421,22 +421,31 @@ enum SituationQuestions {
         "Erkältet auf dem Sofa."
     ]
 
-    static func next(for profile: Profile, asked: Set<String>) -> TasteQuestion? {
-        let moods = FilmIndex.allMoods.sorted {
+    static let neither = "Keins von beiden"
+
+    /// Nächste Entweder-oder-Frage. Damit es nicht nach Schleife klingt:
+    /// jedes Mal eine andere Situation, und keine Stimmung aus der vorigen Frage.
+    static func next(for profile: Profile, history: [String]) -> TasteQuestion? {
+        let asked = Set(history)
+        let previous = history.last { $0.hasPrefix("s:") }
+        let lastMoods = Set(previous.map { $0.dropFirst(2).split(separator: "|").map(String.init) } ?? [])
+        // Stimmungen, über die schon viel bekannt ist (auch durch „Keins von beiden“), kommen später dran.
+        let moods = FilmIndex.allMoods.filter { !lastMoods.contains($0) }.sorted {
             abs(profile.affinity["m:\($0)"] ?? 0) < abs(profile.affinity["m:\($1)"] ?? 0)
         }
+        let situationIndex = history.filter { $0.hasPrefix("s:") }.count
         for (i, a) in moods.enumerated() {
             for b in moods[(i + 1)...] {
                 let pair = [a, b].sorted()
                 let id = "s:\(pair[0])|\(pair[1])"
                 guard !asked.contains(id) else { continue }
-                let situation = situations[id.unicodeScalars.reduce(0) { $0 + Int($1.value) } % situations.count]
+                let situation = situations[situationIndex % situations.count]
                 let la = a.moodLabel + "es", lb = b.moodLabel + "es"
                 return TasteQuestion(id: id, text: "\(situation) Eher was \(la) oder was \(lb)?", answers: [
                     .init(label: "Was \(la)", affinity: ["m:\(a)": 1.2, "m:\(b)": -0.4]),
                     .init(label: "Was \(lb)", affinity: ["m:\(b)": 1.2, "m:\(a)": -0.4]),
                     .init(label: "Beides gern", affinity: ["m:\(a)": 0.5, "m:\(b)": 0.5]),
-                    .init(label: "Keins von beiden", affinity: ["m:\(a)": -0.8, "m:\(b)": -0.8])
+                    .init(label: neither, affinity: ["m:\(a)": -0.8, "m:\(b)": -0.8])
                 ])
             }
         }
