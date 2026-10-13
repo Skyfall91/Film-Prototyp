@@ -93,6 +93,8 @@ struct ForYouView: View {
         .onChange(of: store.runtimeFilter) { _, _ in rebuildQueue(animated: true) }
         .onChange(of: store.kindFilter) { _, _ in rebuildQueue(animated: true) }
         .onChange(of: store.pendingRatings.count) { _, _ in prune() }
+        // Sobald ein Poster da ist, auch seinen Hintergrund vorbereiten.
+        .onChange(of: queue.map(\.id)) { _, _ in BackdropBlur.warmUp(queue.prefix(4).map(\.film.id)) }
         .task {
             if queue.isEmpty { rebuildQueue() }
             switch DemoScreen.current {
@@ -224,7 +226,7 @@ struct ForYouView: View {
         if ownChange, let top = queue.first {
             ownChange = false
             let fresh = store.recommendations(limit: 6).filter { $0.id != top.id }
-            PosterCache.warmUp(fresh.prefix(3).map(\.film.id))
+            PosterCache.warmUp(fresh.prefix(3).map(\.film.id)); BackdropBlur.warmUp(fresh.prefix(3).map(\.film.id))
             withAnimation(.smooth(duration: 0.4)) { queue = [top] + fresh.prefix(3) }
         } else {
             ownChange = false
@@ -234,7 +236,7 @@ struct ForYouView: View {
 
     private func rebuildQueue(animated: Bool = false) {
         let fresh = store.recommendations(limit: 4)
-        PosterCache.warmUp(fresh.map(\.film.id))
+        PosterCache.warmUp(fresh.map(\.film.id)); BackdropBlur.warmUp(fresh.prefix(4).map(\.film.id))
         if animated { withAnimation(.smooth(duration: 0.4)) { queue = fresh } } else { queue = fresh }
         swiped = []
     }
@@ -259,13 +261,14 @@ struct ForYouView: View {
         if swiped.count > 20 { swiped.removeFirst() }
         // Hinten auffüllen erst nach dem Abflug, die nächsten drei Karten liegen ja schon bereit.
         Task {
-            try? await Task.sleep(for: .milliseconds(420))
+            // Erst wenn die nachgerückte Karte ausgefedert ist, sonst schneidet das Auffüllen die Animation ab.
+            try? await Task.sleep(for: .milliseconds(750))
             guard queue.count < 4 else { return }
             let known = Set(queue.map(\.id)).union(swiped.map(\.id))
             for next in store.recommendations(limit: 10) where queue.count < 4 && !known.contains(next.id) {
                 queue.append(next)
             }
-            PosterCache.warmUp(queue.map(\.film.id))
+            PosterCache.warmUp(queue.map(\.film.id)); BackdropBlur.warmUp(queue.map(\.film.id))
         }
     }
 
@@ -294,7 +297,7 @@ struct ForYouView: View {
         let id = UUID()
         pendingWork.append((id, work))
         Task {
-            try? await Task.sleep(for: .milliseconds(380))
+            try? await Task.sleep(for: .milliseconds(700))
             guard let i = pendingWork.firstIndex(where: { $0.id == id }) else { return }
             pendingWork.remove(at: i).work()
         }
@@ -452,7 +455,8 @@ struct RecommendationCard: View {
             RedactedText(rec.film.hook)
                 .font(.callout)
                 .foregroundStyle(.white.opacity(0.88))
-                .lineLimit(compact ? 2 : 3)
+                // Immer drei Zeilen: Ein Umspringen beim Nachrücken würde den Text stückweise neu aufbauen.
+                .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
 
         }

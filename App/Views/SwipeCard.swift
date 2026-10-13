@@ -53,10 +53,11 @@ struct SwipeDeck<Item: Identifiable, Card: View>: View {
                         guard options[direction]?.flyOut != false else {
                             onCommit(item, direction); return
                         }
-                        departing.append(item)
                         // Nachrücken läuft parallel zum Wegfliegen und federt kurz nach,
-                        // so spürt man, dass die neue Karte „landet“.
+                        // so spürt man, dass die neue Karte „landet“. Das Herausnehmen der alten Karte
+                        // muss mit in die Animation, sonst springt die nächste ohne Animation nach vorn.
                         withAnimation(Self.advance) {
+                            departing.append(item)
                             progress = 0
                             onCommit(item, direction)
                         }
@@ -71,23 +72,26 @@ struct SwipeDeck<Item: Identifiable, Card: View>: View {
                 }
                 .scaleEffect(scale(for: index))
                 .offset(y: yOffset(for: index))
-                .opacity(opacity(for: index))
+                // Abdunkeln statt durchsichtig machen: Sonst scheint beim Nachrücken die Karte dahinter durch.
+                .brightness(dimming(for: index))
                 .zIndex(index == -1 ? 100 : Double(10 - index))
                 .allowsHitTesting(index == 0)
-                .transition(.asymmetric(insertion: .opacity.combined(with: .scale(scale: 0.9)), removal: .identity))
+                // Wird eine hintere Karte ausgetauscht, blendet sie weich aus statt zu verschwinden.
+                .transition(.asymmetric(insertion: .opacity.combined(with: .scale(scale: 0.9)), removal: .opacity))
             }
         }
     }
 
-    /// Federnd mit etwas Schwung, damit das Nachrücken lebendig wirkt, aber nicht wackelt.
-    private static var advance: Animation { .spring(response: 0.5, dampingFraction: 0.72) }
+    /// Sichtbar federnd: Die neue Karte schießt ein Stück über ihr Ziel und setzt sich dann.
+    private static var advance: Animation { .spring(response: 0.48, dampingFraction: 0.6) }
 
     // Hintere Karten rücken anteilig zum Ziehfortschritt der vorderen nach vorne.
-    // Beim Ziehen kommt die nächste Karte nur ein Stück, den Rest macht sie beim Loslassen mit Schwung.
-    private func lift(_ index: Int) -> CGFloat { max(CGFloat(index) - min(progress, 1) * 0.6, 0) }
+    // Beim Ziehen kommt die nächste Karte nur ein kleines Stück, damit beim Loslassen
+    // genug Weg für den Schwung und das Nachfedern bleibt.
+    private func lift(_ index: Int) -> CGFloat { max(CGFloat(index) - min(progress, 1) * 0.3, 0) }
     private func scale(for index: Int) -> CGFloat { index <= 0 ? 1 : 1 - lift(index) * 0.08 }
-    private func yOffset(for index: Int) -> CGFloat { index <= 0 ? 0 : lift(index) * 26 }
-    private func opacity(for index: Int) -> Double { index <= 0 ? 1 : Double(1 - lift(index) * 0.45) }
+    private func yOffset(for index: Int) -> CGFloat { index <= 0 ? 0 : lift(index) * 30 }
+    private func dimming(for index: Int) -> Double { index <= 0 ? 0 : -Double(lift(index)) * 0.35 }
 }
 
 /// Karte, die in vier Richtungen gewischt werden kann. Beim Ziehen färbt sie sich

@@ -224,6 +224,8 @@ enum PosterCache {
         slot.image = image
         slot.thumb = thumb
         touch(id)
+        // Unscharfen Hintergrund gleich mit vorbereiten (im Hintergrund), damit er beim Nachrücken bereitliegt.
+        BackdropBlur.thumbnailReady(id)
         // Ältestes Poster aus dem Speicher werfen; das kleine Vorschaubild bleibt.
         while recent.count > memoryLimit { slots[recent.removeFirst()]?.image = nil }
     }
