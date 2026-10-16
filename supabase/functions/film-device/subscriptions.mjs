@@ -1,9 +1,11 @@
 import {fail,uuid} from './domain.mjs';
-const bundles=new Set(['de.beispiel.filmprototyp','de.beispiel.filmprototyp.tv']);
+const defaultBundles=['de.beispiel.filmprototyp','de.beispiel.filmprototyp.tv'];
+// The real bundle IDs come from APPLE_BUNDLE_IDS (comma separated), so they never live in the public code.
+export const bundleIDsFrom=raw=>{const list=String(raw??'').split(',').map(v=>v.trim()).filter(Boolean);return new Set(list.length?list:defaultBundles);};
 const products={'de.beispiel.filmprototyp.abo.solo':'solo','de.beispiel.filmprototyp.abo.duo':'duo','de.beispiel.filmprototyp.abo.familie':'familie'};
 const millis=v=>Number.isSafeInteger(v)&&v>0;
 // This function accepts an already cryptographically verified SDK payload only.
-export function subscriptionFromVerifiedTransaction(t,{userID,environment,now=Date.now()}) {
+export function subscriptionFromVerifiedTransaction(t,{userID,environment,now=Date.now(),bundles=bundleIDsFrom()}) {
  if(!['Sandbox','Production'].includes(environment)||t.environment!==environment)fail('subscription_environment');
  if(!bundles.has(t.bundleId)||!Object.hasOwn(products,t.productId)||t.type!=='Auto-Renewable Subscription')fail('subscription_product');
  if(t.revocationDate!=null||t.revocationReason!=null||t.isUpgraded===true)fail('subscription_revoked');
@@ -24,7 +26,7 @@ export function createAppleVerifier({sdk,roots,getenv,now=Date.now}) {
    const rawID=getenv('APPLE_APP_ID'),appID=rawID?Number(rawID):undefined;
    const issuer=getenv('APPLE_ISSUER_ID'),keyID=getenv('APPLE_KEY_ID'),key=getenv('APPLE_PRIVATE_KEY');
    if(environment==='Production'&&(!Number.isSafeInteger(appID)||appID<=0||!issuer||!keyID||!key))fail('subscription_unavailable');
-   configured=[...bundles].map(bundleID=>({bundleID,verifier:new sdk.SignedDataVerifier(roots,environment==='Production',environment,bundleID,appID),client:environment==='Production'?new sdk.AppStoreServerAPIClient(key.replace(/\\n/g,'\n'),keyID,issuer,bundleID,environment):null}));
+   configured=[...bundleIDsFrom(getenv('APPLE_BUNDLE_IDS'))].map(bundleID=>({bundleID,verifier:new sdk.SignedDataVerifier(roots,environment==='Production',environment,bundleID,appID),client:environment==='Production'?new sdk.AppStoreServerAPIClient(key.replace(/\\n/g,'\n'),keyID,issuer,bundleID,environment):null}));
   }
   let decoded,selected;
   for(const item of configured) {try{decoded=await item.verifier.verifyAndDecodeTransaction(signedTransaction);selected=item;break;}catch{/* No payload or SDK diagnostics are exposed. */}}
@@ -36,6 +38,6 @@ export function createAppleVerifier({sdk,roots,getenv,now=Date.now}) {
    if(!refreshed?.signedTransactionInfo)fail('subscription_invalid');
    try{const current=await selected.verifier.verifyAndDecodeTransaction(refreshed.signedTransactionInfo);if(current.transactionId!==decoded.transactionId)fail('subscription_invalid');decoded=current;}catch{fail('subscription_invalid');}
   }
-  return subscriptionFromVerifiedTransaction(decoded,{userID,environment,now:now()});
+  return subscriptionFromVerifiedTransaction(decoded,{userID,environment,now:now(),bundles:new Set(configured.map(c=>c.bundleID))});
  };
 }
