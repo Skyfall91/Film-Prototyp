@@ -1,0 +1,29 @@
+Lauf vom 16.10.2026, MovieLens 32M, films.json mit 417 Titeln.
+
+Katalog: 417 Filme, davon 300 in MovieLens
+Personen mit ≥20 Bewertungen: 87981 · Training 61587 · Abstimmung 8798 · Test 17596
+Modell gelernt: 299 Filme
+
+--- Abstimmung: 4019 Personen ---
+Verfahren                      Top-5-Treffer  Platz 1 passt  Flops in Top 5
+Zufall                                 40.9%          40.2%            9.6%
+IMDb-Bestenliste                       55.9%          62.1%            6.5%
+Nur Genre und Stimmung                 54.3%          59.5%            4.9%
+λ50 + Inhalt×0                         62.0%          68.3%            3.9%
+λ50 + Inhalt×0.03                      62.2%          68.7%            3.9%
+λ50 + Inhalt×0.06                      62.1%          68.7%            3.8%
+λ100 + Inhalt×0                        63.2%          69.6%            3.9%
+λ100 + Inhalt×0.03                     63.2%          69.9%            3.9%
+λ100 + Inhalt×0.06                     63.1%          69.8%            3.9%
+λ200 + Inhalt×0                        62.9%          69.2%            4.1%
+λ200 + Inhalt×0.03                     63.0%          69.6%            4.1%
+λ200 + Inhalt×0.06                     63.2%          70.0%            4.1%
+gewählt: λ200 + Inhalt×0.06 · in der App: λ100 + Inhalt×0.06
+
+--- Test: 8116 Personen ---
+Verfahren                      Top-5-Treffer  Platz 1 passt  Flops in Top 5
+Zufall                                 41.0%          40.2%            9.5%
+IMDb-Bestenliste                       56.2%          62.6%            6.4%
+Nur Genre und Stimmung                 54.2%          60.0%            5.3%
+Unser Modell (App)                     63.1%          69.2%            3.9%
+Unser Modell (λ200 + Inhalt×0.06)      63.0%          69.4%            4.0%

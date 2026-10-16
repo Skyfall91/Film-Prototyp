@@ -15,7 +15,7 @@ struct Recommendation: Identifiable, Hashable {
 /// Bei mehreren Profilen zählt vor allem, dass *niemand* leer ausgeht.
 enum RecommendationEngine {
 
-    /// Hybrid, getestet an 2.470 echten Personen (MovieLens):
+    /// Hybrid, getestet an 8.116 echten Personen aus MovieLens 32M (tools/empfehlungstest):
     /// Filmbonus + „Leute wie du“ + etwas Qualität + Inhalt (Genre, Stimmung, Regie) + Chat-Hinweise.
     static func score(_ film: Film, for profile: Profile) -> Double {
         var collaborative = film.mlBias ?? 0
