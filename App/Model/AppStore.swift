@@ -1,4 +1,5 @@
 import SwiftUI
+import FilmSync
 
 /// Ein Film, der geschaut wurde und noch bewertet werden soll („Wie war's gestern?“).
 struct PendingRating: Codable, Hashable, Identifiable, Sendable {
@@ -63,6 +64,11 @@ enum AuthError: LocalizedError {
 
 @Observable
 final class AppStore {
+    @ObservationIgnored private let suppressPersistence: Bool
+    @ObservationIgnored var deviceSync: DeviceStateSync?
+    var companionMoodQuery: MoodQuery?
+    var syncStatus = ""
+    var sessionEpoch = UUID()
     var profiles: [Profile] = []
     var activeProfileIDs: [UUID] = []
     /// Konto des Haushalts (Registrierung/Login), getrennt von den Profilen, die es enthält.
@@ -127,11 +133,17 @@ final class AppStore {
         catch CloudAccounts.CloudError.server(let message) { throw AuthError.server(message) }
         // Ein anderes Konto war geladen: Es liegt sicher in der Datenbank, das neue fängt leer an.
         if account != nil { pushNow(); clearSession() }
+        sessionEpoch = UUID()
+        deviceSync?.stop(); deviceSync = nil
         cloudSession = session
+        purchases.accountToken = session.flatMap { UUID(uuidString: $0.userID) }
         let salt = UUID().uuidString
         account = Account(email: mail, passwordHash: Account.hash(password, salt: salt), salt: salt,
                           created: .now, consented: .now, subscription: nil)
         signedIn = true
+        #if !os(tvOS)
+        beginPhoneSyncAfterLogin()
+        #endif
         save(signedInNow: true)
     }
 
@@ -171,9 +183,15 @@ final class AppStore {
         let salt = UUID().uuidString
         account?.salt = salt
         account?.passwordHash = Account.hash(password, salt: salt)
+        sessionEpoch = UUID()
+        deviceSync?.stop(); deviceSync = nil
         cloudSession = session
+        purchases.accountToken = session.flatMap { UUID(uuidString: $0.userID) }
         signedIn = true
         hasChosenViewers = profiles.count <= 1
+        #if !os(tvOS)
+        beginPhoneSyncAfterLogin()
+        #endif
         save(signedInNow: true)
     }
 
@@ -185,6 +203,11 @@ final class AppStore {
 
     func signOut() {
         pushNow()
+        sessionEpoch = UUID()
+        deviceSync?.stop(); deviceSync = nil
+        #if os(tvOS)
+        TVSessionStore.revokeCurrent()
+        #endif
         cloudSession = nil
         CloudAccounts.signOut()
         signedIn = false
@@ -195,16 +218,20 @@ final class AppStore {
 
     /// DSGVO: Konto samt aller Profile, Bewertungen und Importe löschen, online und auf dem Gerät.
     func deleteAccount() {
-        if let session = cloudSession {
-            Task {
-                guard let s = await CloudAccounts.valid(session) else { return }
-                try? await CloudAccounts.deleteAccount(s)
-            }
-        }
-        cloudSession = nil
-        if let email = account?.email { db.delete(email) }
-        account = nil
-        signedIn = false
+        Task { do { try await deleteAccountConfirmed() } catch { syncStatus=error.localizedDescription } }
+    }
+
+    func deleteAccountConfirmed() async throws {
+        let epoch=sessionEpoch
+        guard signedIn, let session=cloudSession else { throw AuthError.offline }
+        guard let fresh=await CloudAccounts.valid(session),epoch==sessionEpoch else { throw AuthError.wrongCredentials }
+        try await CloudAccounts.deleteAccount(fresh)
+        guard epoch==sessionEpoch else { return }
+        sessionEpoch=UUID()
+        deviceSync?.purge();deviceSync=nil
+        cloudSession=nil
+        if let email=account?.email { db.delete(email) }
+        account=nil; signedIn=false
         resetAll()
     }
 
@@ -222,6 +249,7 @@ final class AppStore {
         if !sub.plan.allowsTogether, activeProfileIDs.count > 1 { activeProfileIDs = Array(activeProfileIDs.prefix(1)) }
         if activeProfileIDs.isEmpty, let first = profiles.first { activeProfileIDs = [first.id] }
         save()
+        if sub.source == .appStore { Task { do { try await self.verifyStoreKitEntitlement() } catch { self.syncStatus = error.localizedDescription } } }
     }
 
     func setCanceled(_ canceled: Bool) {
@@ -233,7 +261,7 @@ final class AppStore {
     func syncSubscription() async {
         await purchases.load()
         guard purchases.storeKitAvailable, subscription?.source != .demo else { return }
-        if let current = await purchases.currentSubscription() { account?.subscription = current; save() }
+        if let current = await purchases.currentSubscription() { subscribe(current) }
     }
 
     func chooseViewers(_ ids: [UUID]) {
@@ -244,7 +272,10 @@ final class AppStore {
     }
     var canUndo: Bool { !undoStack.isEmpty }
 
-    init() {
+    init(ephemeral: Bool = false) {
+        suppressPersistence = ephemeral
+        db = AccountDatabase(inMemory: ephemeral)
+        if ephemeral { return }
         load()
         if ProcessInfo.processInfo.arguments.contains("-seedDemo") { seedDemo() }
         if let k = UserDefaults.standard.string(forKey: "kind").flatMap(KindFilter.init) { kindFilter = k }
@@ -358,7 +389,11 @@ final class AppStore {
                 $0.reviews.insert(Review(filmID: film.id, rating: rating, text: text, date: .now), at: 0)
             }
         }
-        pendingRatings.removeAll { $0.id == pending.id }
+        let ratedIDs=Set(ratings.keys)
+        if let index=pendingRatings.firstIndex(where:{$0.id==pending.id}) {
+            pendingRatings[index].profileIDs.removeAll { ratedIDs.contains($0) }
+            if pendingRatings[index].profileIDs.isEmpty { pendingRatings.remove(at:index) }
+        }
         save()
     }
 
@@ -464,6 +499,7 @@ final class AppStore {
     }
 
     func finishOnboarding(profile id: UUID) {
+        if let index = profiles.firstIndex(where: { $0.id == id }) { profiles[index].onboardingComplete = true }
         onboardingDone = true
         activeProfileIDs = [id]
         hasChosenViewers = true
@@ -477,22 +513,153 @@ final class AppStore {
         save()
     }
 
+
+    func onlineSnapshotData() throws -> Data {
+        let snap = Snapshot(profiles: profiles, activeProfileIDs: [], onboardingDone: onboardingDone,
+                            pendingRatings: pendingRatings, account: account, signedIn: nil)
+        return Self.onlineState(try JSONEncoder().encode(snap))
+    }
+
+    func applyCloudSnapshot(_ data: Data) throws {
+        let snapshot = try JSONDecoder().decode(Snapshot.self, from: data)
+        let selection = activeProfileIDs, localAccount = account
+        if profiles != snapshot.profiles { undoStack = [] }
+        profiles = snapshot.profiles
+        pendingRatings = snapshot.pendingRatings
+        onboardingDone = snapshot.onboardingDone || profiles.contains(where: \.onboardingComplete)
+        account = snapshot.account ?? localAccount
+        if account?.email == localAccount?.email {
+            account?.passwordHash = localAccount?.passwordHash ?? ""
+            account?.salt = localAccount?.salt ?? ""
+        }
+        activeProfileIDs = selection.filter { id in profiles.contains{ $0.id == id } && !isPaused(id) }
+        if activeProfileIDs.isEmpty, let first = profiles.first { activeProfileIDs = [first.id] }
+        if activeProfileIDs.isEmpty { hasChosenViewers = false }
+        tasteRevision += 1
+        if !suppressPersistence { persistWithoutPush() }
+    }
+
+    private func persistWithoutPush() {
+        let snap = Snapshot(profiles:profiles,activeProfileIDs:activeProfileIDs,onboardingDone:onboardingDone,pendingRatings:pendingRatings,account:account,signedIn:signedIn)
+        guard let data=try? JSONEncoder().encode(snap) else { return }
+        try? FileManager.default.createDirectory(at:fileURL.deletingLastPathComponent(),withIntermediateDirectories:true)
+        try? data.write(to:fileURL,options:.atomic)
+        if let account { db.upsert(account,state:data,cloudUserID:cloudSession?.userID) }
+    }
+
+    func currentPhoneSessionToken() async throws -> String {
+        guard signedIn, let session=cloudSession, account?.email == session.email else { throw AuthError.offline }
+        let epoch=sessionEpoch
+        guard let fresh=await CloudAccounts.valid(session), epoch==sessionEpoch, signedIn, account?.email==fresh.email else { throw AuthError.wrongCredentials }
+        cloudSession=fresh
+        return fresh.accessToken
+    }
+
+    var syncBaseRevision: Int? { deviceSync?.revision }
+
+    #if !os(tvOS)
+    /// Offline password login can identify an existing cloud account without
+    /// possessing a currently usable credential. Authorization is still checked
+    /// by currentPhoneSessionToken before every eventual network request.
+    private func makePhoneSync() -> DeviceStateSync? {
+        guard signedIn, let email = account?.email,
+              let userID = cloudSession?.userID ?? db.record(email)?.cloudUserID else { return nil }
+        purchases.accountToken = UUID(uuidString: userID)
+        return DeviceStateSync(store: self, userID: userID, token: { [weak self] in
+            guard let self else { throw CancellationError() }
+            return try await self.currentPhoneSessionToken()
+        })
+    }
+
+    private func beginPhoneSyncAfterLogin() {
+        guard !suppressPersistence, deviceSync == nil, let sync = makePhoneSync() else { return }
+        deviceSync = sync
+        sync.startRetrying()
+        Task { try? await sync.start() }
+    }
+    #endif
+
+    func installCloudSync() async throws {
+        guard !suppressPersistence,signedIn else { return }
+        if deviceSync != nil { return }
+        #if os(tvOS)
+        guard let credential=TVSessionStore.load() else { throw AuthError.wrongCredentials }
+        let sync=DeviceStateSync(store:self,userID:credential.userID,token:{
+            guard let active=TVSessionStore.load(),active.userID==credential.userID else { throw AuthError.wrongCredentials }
+            return active.token
+        })
+        #else
+        guard let sync = makePhoneSync() else { throw AuthError.offline }
+        #endif
+        deviceSync=sync
+        do { try await sync.start() } catch {
+            syncStatus = "Offline · Änderungen bleiben für dieses Konto vorgemerkt"
+            sync.startRetrying()
+            throw error
+        }
+    }
+
+    func syncNow() async throws {
+        if deviceSync==nil { try await installCloudSync() }
+        guard let deviceSync else { throw AuthError.server("Der Fernseher-Dienst ist noch nicht erreichbar.") }
+        deviceSync.captureLocalChanges()
+        try await deviceSync.flush()
+    }
+
+    func refreshCloudState() async throws { try await syncNow(); try await deviceSync?.refresh() }
+
+    func adoptTVAccount(_ data:Data,email:String) throws {
+        sessionEpoch=UUID(); deviceSync?.stop();deviceSync=nil
+        account=Account(email:email,passwordHash:"",salt:"",created:.now,consented:.now,subscription:nil)
+        signedIn=true
+        try applyCloudSnapshot(data)
+        hasChosenViewers=profiles.count<=1
+    }
+
+    private func playbackKey(_ filmID:String,_ episode:EpisodeRef?) -> String {
+        episode.map { "\(filmID)|\($0.season)|\($0.episode)" } ?? "\(filmID)|film"
+    }
+    func savePlaybackPosition(filmID:String,episode:EpisodeRef?,seconds:Double) {
+        guard seconds.isFinite,seconds>=0 else { return }
+        let key=playbackKey(filmID,episode)
+        for id in activeProfileIDs { if let i=profiles.firstIndex(where:{$0.id==id}) {profiles[i].playbackPositions[key]=seconds} }
+        save()
+    }
+    func playbackPosition(filmID:String,episode:EpisodeRef?) -> Double? {
+        let key=playbackKey(filmID,episode)
+        return activeProfiles.compactMap { $0.playbackPositions[key] }.max()
+    }
+
     // MARK: - Persistenz
     // Der aktuelle Stand liegt als JSON-Datei vor (schneller Start), jedes Konto zusätzlich
     // in der Konten-Datenbank, damit man per Anmeldung zu ihm zurückkehren kann.
 
-    private let db = AccountDatabase()
+    private let db: AccountDatabase
     /// Online-Sitzung des angemeldeten Kontos (nil = nur auf dem Gerät, z. B. ohne Netz oder im Demo-Modus).
     private var cloudSession: CloudAccounts.Session?
     private var pushTask: Task<Void, Never>?
 
-    private struct Snapshot: Codable {
+    struct Snapshot: Codable {
         var profiles: [Profile]
         var activeProfileIDs: [UUID]
         var onboardingDone: Bool
         var pendingRatings: [PendingRating]
         var account: Account?
         var signedIn: Bool?
+        enum CodingKeys: String, CodingKey { case profiles, activeProfileIDs, onboardingDone, pendingRatings, account, signedIn }
+        init(profiles:[Profile],activeProfileIDs:[UUID],onboardingDone:Bool,pendingRatings:[PendingRating],account:Account?,signedIn:Bool?) {
+            self.profiles=profiles;self.activeProfileIDs=activeProfileIDs;self.onboardingDone=onboardingDone
+            self.pendingRatings=pendingRatings;self.account=account;self.signedIn=signedIn
+        }
+        init(from decoder:any Decoder) throws {
+            let c=try decoder.container(keyedBy:CodingKeys.self)
+            profiles=try c.decode([Profile].self,forKey:.profiles)
+            activeProfileIDs=try c.decodeIfPresent([UUID].self,forKey:.activeProfileIDs) ?? []
+            onboardingDone=try c.decodeIfPresent(Bool.self,forKey:.onboardingDone) ?? false
+            pendingRatings=try c.decodeIfPresent([PendingRating].self,forKey:.pendingRatings) ?? []
+            account=try c.decodeIfPresent(Account.self,forKey:.account)
+            signedIn=try c.decodeIfPresent(Bool.self,forKey:.signedIn)
+        }
     }
 
     private var fileURL: URL {
@@ -503,6 +670,8 @@ final class AppStore {
     /// So hakt beim Wischen nichts, weil Datei und Datenbank nicht mitten in der Animation schreiben.
     func save(signedInNow: Bool = false) {
         tasteRevision += 1
+        guard !suppressPersistence else { return }
+        deviceSync?.captureLocalChanges()
         persistTask?.cancel()
         if signedInNow { persist(signedInNow: true); return }
         persistTask = Task { [weak self] in
@@ -514,6 +683,7 @@ final class AppStore {
 
     /// Sofort schreiben, was noch aussteht (z. B. wenn die App in den Hintergrund geht).
     func flush() {
+        guard !suppressPersistence else { return }
         guard let task = persistTask, !task.isCancelled else { return }
         task.cancel()
         persist()
@@ -529,8 +699,8 @@ final class AppStore {
         guard let data = try? JSONEncoder().encode(snap) else { return }
         try? FileManager.default.createDirectory(at: .applicationSupportDirectory, withIntermediateDirectories: true)
         try? data.write(to: fileURL, options: .atomic)
-        if let account { db.upsert(account, state: data, signedInNow: signedInNow) }
-        schedulePush(data)
+        if let account { db.upsert(account, state: data, signedInNow: signedInNow, cloudUserID: cloudSession?.userID) }
+        if deviceSync == nil { schedulePush(data) }
     }
 
     /// Online speichern, kurz gesammelt: Viele Swipes hintereinander ergeben einen Upload.
@@ -549,6 +719,7 @@ final class AppStore {
     /// Sofort hochladen (vor Abmelden oder Kontowechsel).
     private func pushNow() {
         flush()
+        if let deviceSync { deviceSync.captureLocalChanges(); Task { try? await deviceSync.flush() }; return }
         guard let session = cloudSession, account != nil,
               let data = try? JSONEncoder().encode(Snapshot(profiles: profiles, activeProfileIDs: activeProfileIDs,
                                                             onboardingDone: onboardingDone, pendingRatings: pendingRatings,
@@ -581,7 +752,9 @@ final class AppStore {
         // Online-Sitzung nach einem Neustart weiterverwenden, aber nur für genau dieses Konto.
         if signedIn, let s = CloudAccounts.storedSession, s.email == account?.email { cloudSession = s }
         // Älterer Stand von vor der Datenbank: Konto einmal übernehmen.
-        if let account, db.record(account.email) == nil { db.upsert(account, state: data) }
+        if let account, db.record(account.email) == nil || cloudSession != nil {
+            db.upsert(account, state: data, cloudUserID: cloudSession?.userID)
+        }
     }
 
     private func apply(_ snap: Snapshot) {

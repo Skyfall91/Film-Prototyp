@@ -116,7 +116,11 @@ struct Subscription: Codable, Hashable, Sendable {
 final class PurchaseService {
     var products: [Plan: Product] = [:]
     var loaded = false
+    var accountToken: UUID?
     private var updates: Task<Void, Never>?
+    /// Canonical Apple JWS from a locally verified result. Memory only: the
+    /// server verifies the certificate chain and derives the granted plan.
+    private(set) var signedTransaction: String?
 
     var storeKitAvailable: Bool { !products.isEmpty }
 
@@ -132,15 +136,17 @@ final class PurchaseService {
     enum Outcome { case purchased(Subscription), cancelled, failed(String) }
 
     func purchase(_ plan: Plan) async -> Outcome {
+        signedTransaction = nil
         guard let product = products[plan] else {
             // Kein StoreKit: Testphase lokal anlegen (im UI als Demo-Kauf gekennzeichnet).
             try? await Task.sleep(for: .milliseconds(600))
             return .purchased(.trial(plan, source: .demo))
         }
         do {
-            switch try await product.purchase() {
+            switch try await product.purchase(options: accountToken.map { [.appAccountToken($0)] } ?? []) {
             case .success(let result):
                 guard case .verified(let transaction) = result else { return .failed("Kauf konnte nicht bestätigt werden.") }
+                signedTransaction = result.jwsRepresentation
                 await transaction.finish()
                 return .purchased(Self.subscription(from: transaction, plan: plan))
             case .userCancelled: return .cancelled
@@ -154,8 +160,10 @@ final class PurchaseService {
 
     /// Aktuelles Abo laut App Store (z. B. nach Neuinstallation oder Kündigung im Systemblatt).
     func currentSubscription() async -> Subscription? {
+        signedTransaction = nil
         for await result in Transaction.currentEntitlements {
             guard case .verified(let t) = result, let plan = Plan.forProduct(t.productID) else { continue }
+            signedTransaction = result.jwsRepresentation
             return Self.subscription(from: t, plan: plan)
         }
         return nil
@@ -166,7 +174,7 @@ final class PurchaseService {
         updates = Task {
             for await result in Transaction.updates {
                 if case .verified(let t) = result { await t.finish() }
-                onChange(await currentSubscription())
+                await onChange(await currentSubscription())
             }
         }
     }

@@ -760,9 +760,12 @@ private struct DemoCheckout: View {
 struct AccountView: View {
     @Environment(AppStore.self) private var store
     @State private var changing = false
+    @State private var pairing = false
     @State private var confirmCancel = false
     @State private var confirmDelete = false
     @State private var manageSheet = false
+    @State private var deletionError: String?
+    @State private var deleting = false
 
     var body: some View {
         List {
@@ -771,6 +774,12 @@ struct AccountView: View {
                     LabeledContent("E-Mail", value: account.email)
                     LabeledContent("Gespeichert", value: store.isOnline ? "Online (Supabase, Frankfurt)" : "Nur auf diesem Gerät")
                     LabeledContent("Mitglied seit", value: account.created.formatted(.dateTime.month(.wide).year()))
+                }
+                Section("Fernseher") {
+                    Button("Apple TV verbinden", systemImage: "appletv.fill") { pairing = true }
+                    NavigationLink("Verbundene TVs & Aufgaben", destination: PhoneCompanionView(store: store))
+                    if !store.syncStatus.isEmpty { Text(store.syncStatus).font(.caption).foregroundStyle(.secondary) }
+                    SyncConflictView()
                 }
                 Section("Abo") {
                     if let sub = account.subscription {
@@ -819,7 +828,12 @@ struct AccountView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .navigationTitle("Konto & Abo")
+        .disabled(deleting)
+        .alert("Konto konnte nicht gelöscht werden", isPresented: Binding(get:{deletionError != nil},set:{if !$0 {deletionError=nil}})) {Button("OK"){deletionError=nil}} message:{Text(deletionError ?? "")}
+        .sheet(isPresented: $pairing) {
+            TVPairingSheet(accountEmail: store.account?.email ?? "", accessToken: { try await store.currentPhoneSessionToken() })
+        }
+        .navigationTitle("Einstellungen")
         .navigationBarTitleDisplayMode(.inline)
         .fullScreenCover(isPresented: $changing) {
             PlanPicker(mode: store.subscription == nil ? .unlock : .change) { _ in changing = false }
@@ -832,7 +846,10 @@ struct AccountView: View {
             Text("Du kannst bis \(store.subscription?.renews.formatted(.dateTime.day().month(.wide)) ?? "zum Ende des Zeitraums") weiterschauen.")
         }
         .confirmationDialog("Konto wirklich löschen?", isPresented: $confirmDelete, titleVisibility: .visible) {
-            Button("Konto und alle Daten löschen", role: .destructive) { withAnimation(.smooth) { store.deleteAccount() } }
+            Button("Konto und alle Daten löschen", role: .destructive) {
+                deleting=true
+                Task { do { try await store.deleteAccountConfirmed() } catch { deletionError=error.localizedDescription }; deleting=false }
+            }
         } message: {
             Text("Das lässt sich nicht rückgängig machen.")
         }

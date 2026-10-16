@@ -1,4 +1,5 @@
 import Foundation
+import Accelerate
 
 /// Ein Vorschlag inkl. Begründung, „Warum dieser Film?“ ist Teil des Konzepts.
 struct Recommendation: Identifiable, Hashable {
@@ -224,6 +225,42 @@ enum TasteModel {
         return (0..<n).map { a[$0][$0] != 0 ? a[$0][n] / a[$0][$0] : 0 }
     }
 
+    /// Ridge kernels are symmetric positive definite. Cholesky preserves the same
+    /// solution without eliminating every row against every other row on the UI actor.
+    static func solveRidge(_ m: [[Double]]) -> [Double] {
+        let n = m.count
+        guard n > 0 else { return [] }
+        var lower = [Double](repeating: 0, count: n * n)
+        var valid = true
+        lower.withUnsafeMutableBufferPointer { l in
+            for i in 0..<n {
+                for j in 0...i {
+                    var value = m[i][j]
+                    if j > 0 {
+                        value -= cblas_ddot(Int32(j), l.baseAddress! + i * n, 1, l.baseAddress! + j * n, 1)
+                    }
+                    if i == j {
+                        guard value > 0, value.isFinite else { valid = false; return }
+                        l[i * n + j] = sqrt(value)
+                    } else { l[i * n + j] = value / l[j * n + j] }
+                }
+            }
+        }
+        guard valid else { return solve(m) }
+        var result = [Double](repeating: 0, count: n)
+        for i in 0..<n {
+            var value = m[i][n]
+            for j in 0..<i { value -= lower[i * n + j] * result[j] }
+            result[i] = value / lower[i * n + i]
+        }
+        for i in (0..<n).reversed() {
+            var value = result[i]
+            for j in (i + 1)..<n { value -= lower[j * n + i] * result[j] }
+            result[i] = value / lower[i * n + i]
+        }
+        return result
+    }
+
     static func fit(samples: [Profile.Sample], hints: [String: Double], external: [String: ExternalFilm] = [:]) -> [String: Double] {
         let prior = hints.mapValues { $0 * hintScale }
         let rows = samples.suffix(maxSamples).compactMap { s in
@@ -247,18 +284,10 @@ enum TasteModel {
             a[i][i] += lambda
             a[i][n] = rows[i].1 - 0.5 * mean - dot(rows[i].0, prior)
         }
-        for c in 0..<n {
-            let p = (c..<n).max { abs(a[$0][c]) < abs(a[$1][c]) }!
-            a.swapAt(c, p)
-            guard a[c][c] != 0 else { continue }
-            for r in 0..<n where r != c {
-                let f = a[r][c] / a[c][c]
-                if f != 0 { for k in c...n { a[r][k] -= f * a[c][k] } }
-            }
-        }
+        let solution = solveRidge(a)
         var w = prior
-        for i in 0..<n where a[i][i] != 0 {
-            let alpha = a[i][n] / a[i][i]
+        for i in 0..<n {
+            let alpha = solution[i]
             for (key, x) in rows[i].0 { w[key, default: 0] += alpha * x }
         }
         return w

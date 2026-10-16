@@ -1,11 +1,30 @@
 import Foundation
+#if !os(tvOS)
 import FoundationModels
+#endif
 
 /// Strukturierte Interpretation einer freien Stimmungs-Anfrage.
 /// Das Sprachmodell kennt den Katalog NICHT, es übersetzt nur die Anfrage
 /// in Filter. Gesucht wird danach im eigenen Index (keine erfundenen Filme).
+#if os(tvOS)
+struct MoodQuery: Codable {
+    var moods: [String]
+
+    var genres: [String]
+
+    var exclude: [String]
+
+    var maxRuntimeMinutes: Int
+
+    var familyFriendly: Bool
+
+    var similarTo: String
+
+    var summary: String
+}
+#else
 @Generable
-struct MoodQuery {
+struct MoodQuery: Codable {
     @Guide(description: "Passende Stimmungen, NUR aus dieser Liste: spannend, düster, lustig, gefühlvoll, episch, gemütlich, nachdenklich, gruselig, actionreich, romantisch, bildgewaltig, schräg, inspirierend, familienfreundlich, wendungsreich, musikalisch, leicht, intensiv, bunt, ruhig")
     var moods: [String]
 
@@ -27,6 +46,7 @@ struct MoodQuery {
     @Guide(description: "Sehr kurze deutsche Zusammenfassung des Wunsches, max. 6 Wörter, z. B. 'Leichte Komödie für zwei'")
     var summary: String
 }
+#endif
 
 struct MoodResult {
     var query: MoodQuery
@@ -37,11 +57,19 @@ struct MoodResult {
 enum MoodSearch {
 
     static var isAppleIntelligenceAvailable: Bool {
+        #if os(tvOS)
+        return false
+        #else
         if case .available = SystemLanguageModel.default.availability { return true }
         return false
+
+        #endif
     }
 
     static var availabilityNote: String {
+        #if os(tvOS)
+        return "Stichwortsuche · KI auf dem iPhone"
+        #else
         switch SystemLanguageModel.default.availability {
         case .available: "Apple Intelligence · auf dem Gerät"
         case .unavailable(.appleIntelligenceNotEnabled): "Apple Intelligence ist ausgeschaltet, Stichwortsuche aktiv"
@@ -49,9 +77,15 @@ enum MoodSearch {
         case .unavailable(.modelNotReady): "Modell wird geladen, Stichwortsuche aktiv"
         default: "Stichwortsuche aktiv"
         }
+
+        #endif
     }
 
     static func search(_ text: String, profiles: [Profile]) async -> MoodResult {
+        #if os(tvOS)
+        let query = keywordQuery(text)
+        return MoodResult(query: query, films: rank(query, profiles: profiles), usedAppleIntelligence: false)
+        #else
         var query = keywordQuery(text)
         var usedAI = false
         if isAppleIntelligenceAvailable {
@@ -68,6 +102,8 @@ enum MoodSearch {
             }
         }
         return MoodResult(query: query, films: rank(query, profiles: profiles), usedAppleIntelligence: usedAI)
+
+        #endif
     }
 
     // MARK: - Ranking im eigenen Index
@@ -176,6 +212,9 @@ enum TasteWriter {
     }
 
     static func sentence(for profile: Profile) async -> (String, Bool) {
+        #if os(tvOS)
+        return (TasteSummary(profile: profile).sentence, false)
+        #else
         let summary = TasteSummary(profile: profile)
         guard MoodSearch.isAppleIntelligenceAvailable, !summary.topMoods.isEmpty else { return (summary.sentence, false) }
         if let cached = cached(for: profile) { return (cached, true) }
@@ -197,6 +236,8 @@ enum TasteWriter {
         } catch {
             return (summary.sentence, false)
         }
+
+        #endif
     }
 
     /// Sicherheitsnetz: Anreden oder gegenderte Personenbezeichnungen → neutraler Standardsatz.
@@ -221,6 +262,9 @@ enum TasteWriter {
 /// viele Filme nicht und würde sonst raten. Ergebnis wird gecacht.
 enum SynopsisWriter {
     static func teaser(for film: Film) async -> String? {
+        #if os(tvOS)
+        return UserDefaults.standard.string(forKey: "teaser.\(film.id)")
+        #else
         let cacheKey = "teaser.\(film.id)"
         if let cached = UserDefaults.standard.string(forKey: cacheKey) { return cached.withoutDashes }
         guard MoodSearch.isAppleIntelligenceAvailable else { return nil }
@@ -242,5 +286,7 @@ enum SynopsisWriter {
         } catch {
             return nil
         }
+
+        #endif
     }
 }

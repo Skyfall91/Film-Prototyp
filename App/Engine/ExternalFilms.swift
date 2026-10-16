@@ -1,5 +1,7 @@
 import Foundation
+#if !os(tvOS)
 import FoundationModels
+#endif
 
 /// Ein Film, der nicht im Katalog ist, aber im Chat genannt wurde. Die Merkmale kommen aus
 /// Wikidata (Genre, Regie, Besetzung); Stimmungen werden aus den Genres abgeleitet und, /// wenn verfügbar, von Apple Intelligence ergänzt, aber nur aus unserer festen Liste.
@@ -147,14 +149,23 @@ enum WikidataLookup {
         return Array(out.prefix(3))
     }
 
+    #if os(tvOS)
+    struct MoodGuess {
+            var moods: [String]
+    }
+    #else
     @Generable
     struct MoodGuess {
-        @Guide(description: "2 bis 3 Stimmungen, die den Film am besten beschreiben, nur aus der vorgegebenen Liste")
-        var moods: [String]
+            @Guide(description: "2 bis 3 Stimmungen, die den Film am besten beschreiben, nur aus der vorgegebenen Liste")
+            var moods: [String]
     }
+    #endif
 
     /// Apple Intelligence schätzt die Stimmungen, nur Begriffe aus unserer Liste werden übernommen.
     private static func withMoods(_ film: ExternalFilm) async -> ExternalFilm {
+        #if os(tvOS)
+        return film
+        #else
         guard MoodSearch.isAppleIntelligenceAvailable else { return film }
         let session = LanguageModelSession(instructions: """
             Ordne einen Film Stimmungen zu. Erlaubt sind ausschließlich: \(FilmIndex.allMoods.joined(separator: ", ")).
@@ -166,5 +177,7 @@ enum WikidataLookup {
         var f = film
         f.moods = Array((valid + film.moods).reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }.prefix(3))
         return f
+
+        #endif
     }
 }

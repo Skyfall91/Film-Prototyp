@@ -3,12 +3,15 @@ import SwiftUI
 /// Startseite: genau ein Vorschlag. Wischen statt Scrollen.
 struct ForYouView: View {
     @Environment(AppStore.self) private var store
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var playing: PlaybackRequest?
     @Namespace private var zoom
     @State private var trigger: SwipeDirection?
     /// Details öffnen sich als Morph über der ganzen App (siehe `HeroOverlay`).
     @Environment(HeroCoordinator.self) private var hero
     @State private var addingProfile = false
+    @State private var managingProfiles = false
     @State private var toast: Toast?
     @State private var undoBounce = 0
     /// Feste Warteschlange: Was hinten im Stapel liegt, bleibt dort. Nach jedem Swipe
@@ -39,28 +42,38 @@ struct ForYouView: View {
 
     var body: some View {
         let recs = queue
-        VStack(spacing: 14) {
-            header
-            if let pending = store.pendingRatings.last, let film = FilmIndex.film(pending.filmID) {
-                ratingBanner(pending, film)
-            }
-            if recs.isEmpty {
-                emptyState
-            } else {
-                deck(recs)
-                    // Neue Runde, wenn sich ändert, wer schaut: Die Karte legt sich sichtbar neu hin,
-                    // auch wenn derselbe Film für alle zusammen wieder der beste ist.
-                    .id(store.activeProfileIDs)
-                    .transition(.asymmetric(insertion: .scale(scale: 0.92).combined(with: .opacity), removal: .opacity))
-                if store.homeSwipeCount < 3 {
-                    SwipeLegend(options: options)
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+        GeometryReader { geometry in
+            let expanded = sizeClass == .regular && geometry.size.width >= 760 && geometry.size.height >= 500 && !typeSize.isAccessibilitySize
+            VStack(spacing: expanded ? 24 : 14) {
+                header
+                if let pending = store.pendingRatings.last, let film = FilmIndex.film(pending.filmID) {
+                    ratingBanner(pending, film)
                 }
-                controls(recs.first!.film)
+                if recs.isEmpty {
+                    emptyState
+                } else if expanded, let rec = recs.first {
+                    HStack(spacing: 36) {
+                        deck(recs, topAligned: true)
+                            .id(store.activeProfileIDs)
+                            .frame(maxWidth: geometry.size.width * 0.46)
+                        tabletInformation(rec)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                } else {
+                    deck(recs)
+                        .id(store.activeProfileIDs)
+                        .transition(.asymmetric(insertion: .scale(scale: 0.92).combined(with: .opacity), removal: .opacity))
+                    if store.homeSwipeCount < 3 {
+                        SwipeLegend(options: options)
+                            .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    }
+                    controls(recs.first!.film)
+                }
             }
+            .padding(.horizontal, expanded ? 36 : 18)
+            .padding(.bottom, expanded ? 24 : 6)
+            .frame(width: geometry.size.width, height: geometry.size.height)
         }
-        .padding(.horizontal, 18)
-        .padding(.bottom, 6)
         .background { BlurredBackdrop(film: recs.first?.film) }
         .overlay(alignment: .top) {
             if let toast {
@@ -76,6 +89,9 @@ struct ForYouView: View {
             }
         }
         .filmPlayer($playing, in: zoom)
+        .fullScreenCover(isPresented: $managingProfiles) {
+            NavigationStack { ManageProfilesView() }
+        }
         .fullScreenCover(isPresented: $addingProfile) {
             OnboardingFlow(mode: .addProfile, cancel: { addingProfile = false }) { id in
                 if !store.activeProfileIDs.contains(id) { store.activeProfileIDs.append(id) }
@@ -106,12 +122,52 @@ struct ForYouView: View {
         }
     }
 
+    /// Wide windows keep the touch deck while bringing useful detail alongside it.
+    private func tabletInformation(_ rec: Recommendation) -> some View {
+        VStack(alignment: .leading, spacing: 22) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    Text(rec.film.hook)
+                        .font(.system(.title2, design: .rounded).weight(.semibold))
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(rec.film.metaLine)
+                        .font(.subheadline).foregroundStyle(.secondary)
+                    Text(rec.film.genres.joined(separator: " · "))
+                        .font(.subheadline.weight(.medium))
+                    HStack(spacing: 18) {
+                        if let rating = rec.film.imdbRating {
+                            Label("IMDb \(rating.formatted(.number.precision(.fractionLength(1))))", systemImage: "star.fill")
+                        }
+                        if let tomatoes = rec.film.rottenTomatoes { Text("Rotten Tomatoes \(tomatoes) %") }
+                    }.font(.subheadline).foregroundStyle(.secondary)
+                    if rec.film.synopsis != rec.film.hook {
+                        Text(rec.film.synopsis).font(.body).fixedSize(horizontal: false, vertical: true)
+                    }
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Warum dieser Film?").font(.headline).foregroundStyle(store.accent)
+                        Text(rec.reason).font(.body)
+                    }
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Regie · \(rec.film.director)")
+                        Text(rec.film.cast.prefix(3).joined(separator: " · "))
+                    }.font(.footnote).foregroundStyle(.secondary)
+                    Button("Alle Filmdetails", systemImage: "info.circle") {
+                        hero.show(rec.film, from: "foryou")
+                    }.buttonStyle(.bordered)
+                }.frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            SwipeLegend(options: options)
+            controls(rec.film)
+        }
+    }
+
     // MARK: Kopfzeile
 
     /// Bewusst leise: Avatar, eine Zeile Text, zwei kleine Symbole. Der Film ist der Star.
     private var header: some View {
         HStack(spacing: 12) {
-            ProfileMenu(onCreate: { addingProfile = true }, onManage: { store.selectedTab = 3 }) {
+            ProfileMenu(onCreate: { addingProfile = true }, onManage: { managingProfiles = true }) {
                 AvatarStack(profiles: store.activeProfiles, size: 34)
                     .padding(4)
                     .contentShape(.capsule)
@@ -151,11 +207,10 @@ struct ForYouView: View {
             }
             .buttonStyle(.plain)
             .glassEffect(.regular.interactive(), in: .circle)
+            // Keep navigation in a fixed place; unavailable undo is disabled, never hidden.
             .disabled(!store.canUndo)
-            .opacity(store.canUndo ? 1 : 0)
-            .scaleEffect(store.canUndo ? 1 : 0.6)
-            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: store.canUndo)
             .accessibilityLabel("Rückgängig")
+            .accessibilityHint(store.canUndo ? "Macht den letzten Film-Swipe rückgängig" : "Noch kein Film-Swipe zum Rückgängigmachen")
 
             RuntimeMenu {
                 let active = store.runtimeFilter != nil || store.kindFilter != .all
@@ -185,7 +240,7 @@ struct ForYouView: View {
 
     // MARK: Karten
 
-    private func deck(_ recs: [Recommendation]) -> some View {
+    private func deck(_ recs: [Recommendation], topAligned: Bool = false) -> some View {
         // Kartenbreite aus der verfügbaren Höhe ableiten, damit das Poster ohne Ränder sitzt.
         GeometryReader { geo in
             let width = min(geo.size.width, (geo.size.height - RecommendationCard.infoHeight) * 2 / 3)
@@ -198,7 +253,7 @@ struct ForYouView: View {
                     // ein eckiges Rechteck hinter den runden Ecken.
                     .matchedTransitionSource(id: rec.film.id, in: zoom) { $0.clipShape(.rect(cornerRadius: 28)).background(.clear) }
             }
-            .frame(width: geo.size.width, height: geo.size.height)
+            .frame(width: geo.size.width, height: topAligned ? min(geo.size.height, width * 1.5) : geo.size.height)
         }
         .frame(maxHeight: .infinity)
     }
@@ -381,7 +436,7 @@ struct RecommendationCard: View {
     private var detailsUp: Bool { heroScope.map { hero.isShowingDetails(rec.film.id, in: $0) } ?? false }
     @State private var shownMatch = 0
 
-    static let titleFont = Font.system(size: 36, weight: .heavy, design: .rounded)
+    static let titleFont = Theme.recommendationTitle(size: 36)
     static let shade = LinearGradient(stops: [.init(color: .black.opacity(0), location: 0),
                                               .init(color: .black.opacity(0.75), location: 0.3),
                                               .init(color: .black.opacity(0.88), location: 0.55),
@@ -575,9 +630,7 @@ final class HeroCoordinator {
     @ObservationIgnored var titleFrames: [String: CGRect] = [:]
     var detailFrame: CGRect = .zero
     var detailTitleFrame: CGRect = .zero
-    /// Schon während des Auffliegens geschlossen: nach der Landung sofort zurück.
-    @ObservationIgnored private var closeRequested = false
-    @ObservationIgnored private var opening = false
+    @ObservationIgnored private var transitionTask: Task<Void, Never>?
     /// Während des Rückflugs angetippt: danach direkt öffnen statt den Tipp zu verlieren.
     @ObservationIgnored private var closingNow = false
     @ObservationIgnored private var pendingShow: (Film, String)?
@@ -597,36 +650,47 @@ final class HeroCoordinator {
             if closingNow { pendingShow = (film, scope) }
             return
         }
-        closeRequested = false
-        opening = true
+        transitionTask?.cancel()
         open = false
         detailFrame = .zero
         self.scope = scope
         ghost = sources[Self.key(film.id, scope)] == nil ? nil : film
         self.film = film
-        Task {
+        transitionTask = Task {
             // Warten, bis die Detailseite steht und ihr Cover gemessen ist.
-            for _ in 0..<20 where detailFrame == .zero { try? await Task.sleep(for: .milliseconds(16)) }
+            for _ in 0..<20 where detailFrame == .zero {
+                try? await Task.sleep(for: .milliseconds(16))
+                guard !Task.isCancelled else { return }
+            }
+            guard !Task.isCancelled else { return }
             withAnimation(.spring(response: 0.52, dampingFraction: 0.84)) { open = true }
             try? await Task.sleep(for: .milliseconds(560))
+            guard !Task.isCancelled else { return }
             if open { ghost = nil }
-            opening = false
-            if closeRequested { closeRequested = false; close() }
         }
     }
 
     func close() {
         guard let film else { return }
-        // Noch im Anflug: merken statt verschlucken.
-        if opening { closeRequested = true; return }
-        guard open, ghost == nil else { return }
+        guard !closingNow else { return }
+        transitionTask?.cancel()
+        // A close before layout must not let a stale opening task present later.
+        guard open else {
+            self.film = nil; scope = nil; ghost = nil
+            return
+        }
         // Ist die Quelle verschwunden (z. B. von der Merkliste genommen), blendet die Seite nur aus.
         let flies = source != nil
+        let alreadyFlying = ghost != nil
         if flies { ghost = film }
         closingNow = true
-        Task {
+        if alreadyFlying || !flies {
+            withAnimation(.spring(response: 0.46, dampingFraction: 0.88)) { open = false }
+        }
+        transitionTask = Task {
             // Erst einen Frame mit dem Cover an der Detailposition zeigen, dann losfliegen.
-            if flies { try? await Task.sleep(for: .milliseconds(20)) }
+            if flies && !alreadyFlying { try? await Task.sleep(for: .milliseconds(20)) }
+            guard !Task.isCancelled else { return }
             withAnimation(.spring(response: 0.46, dampingFraction: 0.88)) { open = false }
             try? await Task.sleep(for: .milliseconds(flies ? 460 : 380))
             closingNow = false

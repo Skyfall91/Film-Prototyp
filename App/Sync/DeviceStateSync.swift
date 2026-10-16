@@ -1,0 +1,259 @@
+import Foundation
+import Observation
+import FilmSync
+import LightCode
+
+nonisolated struct CloudStateReply: Codable, Sendable {
+    let state: JSONValue
+    let revision: Int
+    let userID: String
+    let email: String
+}
+
+/// Records local actions before its first network request and keeps doing so
+/// while offline. Every response is checked against the account's local epoch.
+@MainActor @Observable
+final class DeviceStateSync {
+    @ObservationIgnored private weak var store: AppStore?
+    @ObservationIgnored private let userID: String
+    @ObservationIgnored private let token: () async throws -> String
+    @ObservationIgnored private let client: PairingClient
+    @ObservationIgnored private let epoch: UUID
+    @ObservationIgnored private let outboxURL: URL
+    @ObservationIgnored private var sender: Task<Void, Never>?
+    @ObservationIgnored private var reader: Task<Void, Never>?
+    @ObservationIgnored private var sending = false
+    @ObservationIgnored private var starting = false
+    @ObservationIgnored private var stopped = false
+    @ObservationIgnored private var ready = false
+    private var outbox: SyncOutbox
+    var revision: Int { outbox.revision ?? 0 }
+    var conflicts: [SyncConflict] { outbox.conflicts }
+
+    init(store: AppStore, userID: String, token: @escaping () async throws -> String,
+         client: PairingClient? = nil, storageDir: URL? = nil) {
+        self.store = store; self.userID = userID.lowercased(); self.token = token; epoch = store.sessionEpoch
+        self.client = client ?? PairingClient(baseURL: CloudAccounts.backendURL, publishableKey: CloudAccounts.pairingPublishableKey)
+        outboxURL = (storageDir ?? URL.applicationSupportDirectory.appending(path: "SyncOutbox"))
+            .appending(path: userID.lowercased() + ".json")
+        let local = (try? JSONValue.decode(store.onlineSnapshotData())) ?? .object([:])
+        var restored = SyncOutbox(accountID: userID, local: local)
+        if let data = try? Data(contentsOf: outboxURL) {
+            if let saved = try? SyncOutbox.restore(data, accountID: userID, local: local) { restored = saved }
+            else if let legacy = try? JSONDecoder().decode([SyncOperation].self, from: data) { restored.importLegacy(legacy) }
+        }
+        outbox = restored
+        if !restored.pending.isEmpty || !restored.conflicts.isEmpty {
+            try? store.applyCloudSnapshot(restored.projectedState().data())
+        }
+    }
+    private var active: Bool { !stopped && store?.signedIn == true && store?.sessionEpoch == epoch }
+
+    func start() async throws {
+        do {
+            try await initializeIfNeeded()
+            startRetrying()
+            try await flush()
+        } catch {
+            handle(error)
+            throw error
+        }
+    }
+
+    /// Also called after the initial read failed. The coordinator remains the
+    /// local recorder, so an offline app never falls back to snapshot upserts.
+    func startRetrying() {
+        guard active, reader == nil else { return }
+        reader = Task { [weak self] in
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: .seconds(8)); try Task.checkCancellation()
+                    guard let self, self.active else { break }
+                    try await self.refresh()
+                } catch is CancellationError { break }
+                catch { self?.handle(error) }
+            }
+        }
+    }
+
+    private func initializeIfNeeded() async throws {
+        guard active else { throw CancellationError() }
+        while starting {
+            try await Task.sleep(for: .milliseconds(30)); try Task.checkCancellation()
+            guard active else { throw CancellationError() }
+        }
+        guard !ready else { return }
+        starting = true; defer { starting = false }
+        try captureCurrent()
+        let credential = try await token()
+        guard active else { throw CancellationError() }
+        let body: JSONValue
+        #if os(tvOS)
+        body = .object([:])
+        #else
+        body = .object(["bootstrapState": outbox.bootstrapState])
+        #endif
+        let reply: CloudStateReply = try await client.post(route: "readState", body: body, bearerToken: credential, as: CloudStateReply.self)
+        try check(reply)
+        try captureCurrent()
+        outbox.reconcile(server: reply.state, revision: reply.revision)
+        try persistOutbox()
+        try applyProjection()
+        ready = true
+    }
+
+    func captureLocalChanges() {
+        guard active else { return }
+        do { try captureCurrent() }
+        catch { handle(error); return }
+        guard !outbox.pending.isEmpty else { return }
+        store?.syncStatus = "Änderungen werden übertragen"
+        // Never cancel an already transmitting task: an accepted response must
+        // reach acknowledgement even if another local action arrives meanwhile.
+        guard !sending else { return }
+        sender?.cancel()
+        sender = Task { [weak self] in
+            do {
+                try await Task.sleep(for: .milliseconds(800)); try Task.checkCancellation()
+                try await self?.flush()
+            } catch is CancellationError { }
+            catch { self?.handle(error) }
+        }
+    }
+
+    func flush() async throws {
+        do {
+            try await initializeIfNeeded()
+            while sending {
+                try await Task.sleep(for: .milliseconds(30)); try Task.checkCancellation()
+                guard active else { throw CancellationError() }
+            }
+            guard active else { throw CancellationError() }
+            sending = true; defer { sending = false }
+            var isolateFailures = false
+            var retriedRevision: Int?
+            while active && !outbox.pending.isEmpty {
+                try Task.checkCancellation()
+                let batch = Array(outbox.pending.prefix(isolateFailures ? 1 : 100))
+                nonisolated struct Body: Encodable, Sendable { let baseRevision: Int; let operations: [SyncOperation] }
+                let credential = try await token()
+                guard active else { throw CancellationError() }
+                do {
+                    let body = Body(baseRevision: batch.first?.submissionRevision ?? revision, operations: batch.map(\.operation))
+                    let reply: CloudStateReply = try await client.post(route: "applyMutations", body: body, bearerToken: credential, as: CloudStateReply.self)
+                    try check(reply)
+                    try captureCurrent()
+                    outbox.acknowledge(Set(batch.map { $0.operation.id }), server: reply.state, revision: reply.revision)
+                    try persistOutbox(); try applyProjection()
+                    retriedRevision = nil
+                } catch PairingClientError.server(let status, let code) where status == 400 || status == 409 {
+                    let reply = try await readCurrentState()
+                    try captureCurrent()
+                    outbox.reconcile(server: reply.state, revision: reply.revision)
+                    try persistOutbox(); try applyProjection()
+                    let remaining = Set(outbox.pending.map { $0.operation.id })
+                    guard batch.contains(where: { remaining.contains($0.operation.id) }) else { continue }
+                    if code == "revision_conflict", retriedRevision != reply.revision {
+                        retriedRevision = reply.revision
+                        continue
+                    }
+                    if batch.count > 1 { isolateFailures = true; continue }
+                    if let entry = batch.first {
+                        outbox.quarantine(id: entry.operation.id, title: conflictTitle(code))
+                        try persistOutbox(); try applyProjection()
+                    }
+                }
+            }
+            guard active else { throw CancellationError() }
+            updateStatus()
+        } catch {
+            handle(error)
+            throw error
+        }
+    }
+
+    func refresh() async throws {
+        do {
+            guard active, !sending else { return }
+            try await flush()
+            let reply = try await readCurrentState()
+            try captureCurrent()
+            outbox.reconcile(server: reply.state, revision: reply.revision)
+            try persistOutbox(); try applyProjection()
+            updateStatus()
+        } catch { handle(error); throw error }
+    }
+
+    func resolveConflict(id: UUID, useLocal: Bool) async throws {
+        guard active else { throw CancellationError() }
+        // A new remote edit might have occurred while the choice was on screen.
+        let reply = try await readCurrentState()
+        try captureCurrent()
+        outbox.reconcile(server: reply.state, revision: reply.revision)
+        outbox.resolveConflict(id: id, useLocal: useLocal)
+        try persistOutbox(); try applyProjection()
+        try await flush()
+    }
+
+    func stop() {
+        stopped = true; sender?.cancel(); reader?.cancel(); sender = nil; reader = nil
+        try? persistOutbox()
+    }
+
+    /// Only confirmed account deletion removes unacknowledged local actions.
+    func purge() {
+        stop()
+        try? FileManager.default.removeItem(at: outboxURL)
+    }
+
+    private func captureCurrent() throws {
+        guard active, let store else { throw CancellationError() }
+        outbox.capture(try JSONValue.decode(store.onlineSnapshotData()))
+        try persistOutbox()
+    }
+    private func readCurrentState() async throws -> CloudStateReply {
+        guard active else { throw CancellationError() }
+        let credential = try await token()
+        guard active else { throw CancellationError() }
+        let reply: CloudStateReply = try await client.post(route: "readState", body: JSONValue.object([:]), bearerToken: credential, as: CloudStateReply.self)
+        try check(reply)
+        return reply
+    }
+    private func check(_ reply: CloudStateReply) throws {
+        guard active, reply.userID.lowercased() == userID, reply.email == store?.account?.email else { throw CancellationError() }
+    }
+    private func applyProjection() throws {
+        guard active, let store else { throw CancellationError() }
+        try store.applyCloudSnapshot(outbox.projectedState().data())
+    }
+    private func persistOutbox() throws {
+        let data = try JSONEncoder().encode(outbox)
+        try FileManager.default.createDirectory(at: outboxURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try data.write(to: outboxURL, options: .atomic)
+    }
+    private func updateStatus() {
+        guard active else { return }
+        if !conflicts.isEmpty { store?.syncStatus = "Andere Änderungen aktuell · Konflikte bitte prüfen" }
+        else if !outbox.pending.isEmpty { store?.syncStatus = "Änderungen werden übertragen" }
+        else { store?.syncStatus = "iPhone und Fernseher aktuell" }
+    }
+    private func conflictTitle(_ code: String) -> String {
+        switch code {
+        case "profile_deleted", "profile_not_found": "Das Profil wurde gelöscht. Diese Änderung wurde nicht übernommen."
+        case "age_restricted": "Die aktuelle Altersfreigabe erlaubt diese Änderung nicht."
+        case "profile_limit": "Der aktuelle Tarif hat keinen freien Profilplatz."
+        case "unverified_subscription": "Dieser Tarif muss zuerst über den App Store bestätigt werden."
+        default: "Diese Änderung wurde vom Kontodienst abgelehnt (\(code))."
+        }
+    }
+    private func handle(_ error: Error) {
+        guard active, !(error is CancellationError) else { return }
+        if case PairingClientError.server(let status, _) = error, status == 401 || status == 403 {
+            stop(); store?.signOut()
+            store?.syncStatus = "Die Geräteanmeldung ist abgelaufen oder wurde entfernt. Bitte erneut anmelden."
+        } else {
+            store?.syncStatus = "Offline · Änderungen bleiben auf diesem Gerät gespeichert"
+        }
+    }
+    deinit { sender?.cancel(); reader?.cancel() }
+}

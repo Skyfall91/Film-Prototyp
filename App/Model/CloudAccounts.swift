@@ -6,9 +6,9 @@ import Security
 /// Jedes Konto darf nur seine eigene Zeile lesen und schreiben (Row Level Security).
 /// Ohne Netz arbeitet die App mit der Konten-Datenbank auf dem Gerät weiter.
 enum CloudAccounts {
-    private static let base = URL(string: "https://rdjgtjuytrjuqlvrpask.supabase.co")!
+    static let backendURL = URL(string: "https://rdjgtjuytrjuqlvrpask.supabase.co")!
     /// Öffentlicher Schlüssel, laut Supabase zum Teilen gedacht. Geschützt wird über die Regeln in der Datenbank.
-    private static let publishableKey = "sb_publishable_hrGW1J9lq2srROJup1HDNA_MRstT4hO"
+    static let pairingPublishableKey = "sb_publishable_hrGW1J9lq2srROJup1HDNA_MRstT4hO"
 
     struct Session: Codable {
         var email: String
@@ -42,7 +42,9 @@ enum CloudAccounts {
     /// Sitzung mit gültigem Zugangsschlüssel, bei Bedarf erneuert.
     static func valid(_ session: Session) async -> Session? {
         guard session.expires < .now.addingTimeInterval(60) else { return session }
-        return try? await authRequest("token?grant_type=refresh_token", body: ["refresh_token": session.refreshToken])
+        guard let fresh=try? await authRequest("token?grant_type=refresh_token", body:["refresh_token":session.refreshToken],persist:false) else {return nil}
+        if Keychain.session?.userID==session.userID {Keychain.session=fresh}
+        return fresh
     }
 
     static func signOut() { Keychain.session = nil }
@@ -89,10 +91,10 @@ enum CloudAccounts {
         let user: User
     }
 
-    private static func authRequest(_ path: String, body: [String: String]) async throws -> Session {
-        var request = URLRequest(url: URL(string: "auth/v1/\(path)", relativeTo: base)!)
+    private static func authRequest(_ path: String, body: [String: String], persist: Bool = true) async throws -> Session {
+        var request = URLRequest(url: URL(string: "auth/v1/\(path)", relativeTo: backendURL)!)
         request.httpMethod = "POST"
-        request.setValue(publishableKey, forHTTPHeaderField: "apikey")
+        request.setValue(pairingPublishableKey, forHTTPHeaderField: "apikey")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(body)
         let data = try await send(request)
@@ -101,13 +103,13 @@ enum CloudAccounts {
         }
         let session = Session(email: r.user.email ?? "", accessToken: r.access_token, refreshToken: r.refresh_token, userID: r.user.id,
                               expires: .now.addingTimeInterval(r.expires_in))
-        Keychain.session = session
+        if persist { Keychain.session = session }
         return session
     }
 
     private static func restRequest(_ path: String, session: Session) -> URLRequest {
-        var request = URLRequest(url: URL(string: "rest/v1/\(path)", relativeTo: base)!)
-        request.setValue(publishableKey, forHTTPHeaderField: "apikey")
+        var request = URLRequest(url: URL(string: "rest/v1/\(path)", relativeTo: backendURL)!)
+        request.setValue(pairingPublishableKey, forHTTPHeaderField: "apikey")
         request.setValue("Bearer \(session.accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         return request

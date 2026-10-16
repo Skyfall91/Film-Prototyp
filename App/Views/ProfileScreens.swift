@@ -2,83 +2,6 @@ import SwiftUI
 
 // MARK: - Avatare
 
-/// Profilbilder nach Genres sortiert, wie die Avatar-Reihen bei Netflix, nur ohne fremde Figuren.
-/// Jede Figur hat ihre eigene Farbe, sie wird zur Akzentfarbe des Profils.
-struct AvatarArt: Identifiable, Hashable {
-    let id: String
-    let emoji: String
-    let category: String
-    let colorIndex: Int
-    let hex: UInt32
-
-    var color: Color {
-        Color(red: Double(hex >> 16 & 0xFF) / 255, green: Double(hex >> 8 & 0xFF) / 255, blue: Double(hex & 0xFF) / 255)
-    }
-
-    /// Neue Figuren nur hinten anhängen: Die Nummer in der ID verweist auf gespeicherte Profile.
-    static let categories: [(name: String, key: String, color: Int, emojis: [(String, UInt32)])] = [
-        ("Science-Fiction", "scifi", 1, [("👽", 0x7ED957), ("🤖", 0x8FA8C8), ("🚀", 0xFF5A4E), ("🪐", 0xF2B25C),
-                                         ("👾", 0xA779FF), ("🛸", 0x4FD1C5), ("🌌", 0x6C7BFF), ("☄️", 0xFF8A3D),
-                                         ("🛰️", 0x7CC4E8), ("🌙", 0xF5D76E)]),
-        ("Fantasy", "fantasy", 2, [("🐉", 0x3FBF7F), ("🧙", 0x8E6CFF), ("🦄", 0xFF8AD8), ("🧚", 0x6FE0C8),
-                                   ("🧜", 0x3BC4E0), ("🔮", 0xB57BFF), ("🏰", 0xC2A878), ("🍄", 0xFF5F57),
-                                   ("🗝️", 0xE8B04B), ("🌈", 0xFFB547)]),
-        ("Grusel", "grusel", 4, [("👻", 0xB8C4D6), ("🧛", 0xE0384F), ("🎃", 0xFF8C2B), ("💀", 0xD9D2C3),
-                                 ("🕷️", 0x7A5BD6), ("🧟", 0x8DBF4A), ("🦇", 0x9B59B6), ("🕯️", 0xF7C35C),
-                                 ("🦉", 0xB08B5E), ("🌑", 0x7D8BA6)]),
-        ("Abenteuer", "abenteuer", 0, [("🦖", 0x59C36A), ("🏴‍☠️", 0x9AA3AE), ("🦁", 0xF5A623), ("🦈", 0x4A90E2),
-                                       ("🦅", 0xC8894A), ("🐺", 0x8796A8), ("🧭", 0xE9A23B), ("🌋", 0xFF6A3D),
-                                       ("🏔️", 0x8EC9FF), ("🐊", 0x6BAF5A)]),
-        ("Komödie", "komoedie", 5, [("🤡", 0xFF4D5E), ("🐵", 0xC68B59), ("🦆", 0xFFD23F), ("🐸", 0x6DD36D),
-                                    ("🐧", 0x7FB8FF), ("🦥", 0xC9A27E), ("🍌", 0xFFE066), ("🦩", 0xFF7EB6),
-                                    ("🐙", 0xFF7A6B), ("🤠", 0xE0A458)]),
-        ("Kino-Snacks", "snacks", 5, [("🍿", 0xF4D35E), ("🍕", 0xFF9F43), ("🍩", 0xFF7EB6), ("🌮", 0xF7B267),
-                                      ("🧁", 0xE58FD6), ("🍉", 0xFF5E6C), ("🥨", 0xC8894A), ("🍫", 0xB07A55)]),
-        ("Für Kinder", "kinder", 3, [("🐻", 0xC98A5A), ("🐼", 0x7BDCB5), ("🐰", 0xFFA3C7), ("🦊", 0xFF8A3D),
-                                     ("🐨", 0x9DB4D3), ("🐯", 0xFFB13D), ("🐶", 0xE3B27A), ("🐱", 0xFFC86B),
-                                     ("🐷", 0xFF9EB5), ("🐥", 0xFFD84D), ("🐳", 0x5AB0FF), ("🦋", 0x6FA8FF)]),
-    ]
-
-    static let all: [AvatarArt] = categories.flatMap { c in
-        c.emojis.enumerated().map {
-            AvatarArt(id: "\(c.key)-\($0.offset)", emoji: $0.element.0, category: c.name, colorIndex: c.color, hex: $0.element.1)
-        }
-    }
-    static func byID(_ id: String) -> AvatarArt? { all.first { $0.id == id } }
-    static func inCategory(_ name: String) -> [AvatarArt] { all.filter { $0.category == name } }
-}
-
-/// Avatar als Kachel: Genre-Farbe, Figur in der Mitte.
-struct AvatarTile: View {
-    let art: AvatarArt?
-    var initial = "?"
-    var color: Color = Profile.palette[0]
-    var size: CGFloat
-    var circle = false
-
-    var body: some View {
-        let tint = art?.color ?? color
-        let shape = circle ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: size * 0.24, style: .continuous))
-        ZStack {
-            LinearGradient(colors: [tint.mix(with: .black, by: 0.15), tint.mix(with: .black, by: 0.4)],
-                           startPoint: .top, endPoint: .bottom)
-            if let art {
-                Text(art.emoji)
-                    .font(.system(size: size * 0.56))
-                    .shadow(color: .black.opacity(0.35), radius: size * 0.04, y: size * 0.03)
-            } else {
-                Text(initial)
-                    .font(.system(size: size * 0.45, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
-            }
-        }
-        .frame(width: size, height: size)
-        .clipShape(shape)
-        .overlay(shape.stroke(.white.opacity(0.14), lineWidth: max(0.5, size * 0.008)))
-        .accessibilityHidden(true)
-    }
-}
-
 // MARK: - Profil erstellen
 
 /// Profil anlegen wie bei den großen Streamingdiensten: großes Profilbild im Mittelpunkt,
@@ -306,6 +229,7 @@ struct ProfileEditor: View {
 /// Alle Profile des Haushalts: umbenennen, Bild und Altersstufe ändern, löschen.
 /// Hier liegt auch der Import von Letterboxd und IMDb, bewusst nicht im Onboarding.
 struct ManageProfilesView: View {
+    @Environment(\.dismiss) private var dismiss
     @Environment(AppStore.self) private var store
     @State private var editing: UUID?
     @State private var adding = false
@@ -316,33 +240,45 @@ struct ManageProfilesView: View {
     private var importable: [Profile] { store.profiles.filter { !$0.isKid } }
 
     var body: some View {
-        List {
-            Section {
-                ForEach(store.profiles) { profile in
-                    Button { editing = profile.id } label: {
-                        HStack(spacing: 14) {
-                            AvatarView(profile: profile, size: 44)
-                            VStack(alignment: .leading, spacing: 2) {
+        ScrollView {
+            VStack(spacing: 30) {
+                Text("Welches Profil möchtest du bearbeiten?")
+                    .font(.title2.weight(.bold)).multilineTextAlignment(.center)
+                    .padding(.top, 24)
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 120, maximum: 150), spacing: 28)], spacing: 30) {
+                    ForEach(store.profiles) { profile in
+                        Button { editing = profile.id } label: {
+                            VStack(spacing: 12) {
+                                AvatarTile(art: profile.avatarArt, initial: profile.initial, color: profile.color, size: 120)
+                                    .overlay(alignment: .bottomTrailing) {
+                                        Image(systemName: "pencil")
+                                            .font(.system(size: 17, weight: .semibold))
+                                            .foregroundStyle(.black)
+                                            .frame(width: 34, height: 34)
+                                            .background(.white, in: .circle)
+                                            .overlay(Circle().stroke(.black, lineWidth: 3))
+                                            .offset(x: 5, y: 5)
+                                    }
                                 Text(profile.name).font(.headline)
                                 Text(profile.ageLabel).font(.caption).foregroundStyle(.secondary)
                             }
-                            Spacer()
-                            Image(systemName: "pencil").foregroundStyle(.secondary)
                         }
-                        .contentShape(.rect)
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("\(profile.name) bearbeiten")
                     }
-                    .buttonStyle(.plain)
-                    .swipeActions {
-                        if store.canDeleteProfile {
-                            Button("Löschen", systemImage: "trash", role: .destructive) { confirmDelete = profile }
-                        }
+                    if store.canAddProfile {
+                        Button { adding = true } label: {
+                            VStack(spacing: 12) {
+                                Image(systemName: "plus").font(.system(size: 34, weight: .medium))
+                                    .frame(width: 120, height: 120)
+                                    .background(.white.opacity(0.06), in: .rect(cornerRadius: 29))
+                                Text("Profil hinzufügen").font(.subheadline)
+                            }.foregroundStyle(.secondary)
+                        }.buttonStyle(.plain)
                     }
                 }
-                Button("Profil hinzufügen", systemImage: "person.badge.plus") { adding = true }
-            } footer: {
-                Text(store.canDeleteProfile ? "Zum Löschen nach links wischen oder das Profil öffnen." : "Das letzte Profil kann nicht gelöscht werden.")
-            }
-
+                Text("Tippe auf ein Profil, um Name, Bild oder Altersfreigabe zu ändern.")
+                    .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
             if !importable.isEmpty {
                 Section {
                     if importable.count == 1, let only = importable.first {
@@ -361,8 +297,12 @@ struct ManageProfilesView: View {
                 }
             }
         }
-        .navigationTitle("Profile")
+            .frame(maxWidth: 720).frame(maxWidth: .infinity)
+            .padding(28)
+        }
+        .navigationTitle("Profile verwalten")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Fertig") { dismiss() } } }
         .fullScreenCover(item: Binding(get: { editing.map(IdentifiedUUID.init) }, set: { editing = $0?.id })) { item in
             if let profile = store.profiles.first(where: { $0.id == item.id }) {
                 ProfileEditor(isFirst: false, editing: profile, cancel: { editing = nil },

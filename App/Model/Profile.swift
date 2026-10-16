@@ -79,6 +79,8 @@ struct Profile: Codable, Identifiable, Hashable, Sendable {
     var avatar: String?
     /// Serien: nächste Folge je Serie („Weiterschauen“).
     var progress: [String: EpisodeRef] = [:]
+    var playbackPositions: [String: Double] = [:]
+    var onboardingComplete = false
 
     struct Sample: Codable, Hashable, Sendable {
         var filmID: String
@@ -109,6 +111,8 @@ struct Profile: Codable, Identifiable, Hashable, Sendable {
         external = try c.decodeIfPresent([String: ExternalFilm].self, forKey: .external) ?? [:]
         avatar = try c.decodeIfPresent(String.self, forKey: .avatar)
         progress = try c.decodeIfPresent([String: EpisodeRef].self, forKey: .progress) ?? [:]
+        playbackPositions = try c.decodeIfPresent([String: Double].self, forKey: .playbackPositions) ?? [:]
+        onboardingComplete = try c.decodeIfPresent(Bool.self, forKey: .onboardingComplete) ?? false
         if let saved = try c.decodeIfPresent([Sample].self, forKey: .samples) {
             samples = saved
         } else {

@@ -240,9 +240,7 @@ struct CatalogView: View {
                                     .heroSource(film, in: "catalog", cornerRadius: 12)
                             }
                             .buttonStyle(.plain)
-                            .scrollTransition { view, phase in
-                                view.opacity(phase.isIdentity ? 1 : 0.5).scaleEffect(phase.isIdentity ? 1 : 0.92)
-                            }
+                            .accessibilityIdentifier("catalog.poster.\(film.id)")
                             .transition(.scale(scale: 0.8).combined(with: .opacity))
                         }
                     }
@@ -420,25 +418,13 @@ struct ProfileTabView: View {
                     VStack(spacing: 0) {
                         NavigationLink { AccountView() } label: {
                             HStack(spacing: 14) {
-                                Image(systemName: "creditcard").frame(width: 22)
+                                Image(systemName: "gearshape").frame(width: 22)
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text("Konto & Abo")
+                                    Text("Einstellungen")
                                     if let sub = store.subscription {
                                         Text("\(sub.plan.name) · \(sub.statusText)").font(.caption).foregroundStyle(.secondary).lineLimit(1)
                                     }
                                 }
-                                Spacer()
-                                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
-                            }
-                            .padding(16)
-                            .contentShape(.rect)
-                        }
-                        .buttonStyle(.plain)
-                        Divider().padding(.leading, 50)
-                        NavigationLink { ManageProfilesView() } label: {
-                            HStack(spacing: 14) {
-                                Image(systemName: "person.2").frame(width: 22)
-                                Text("Profile verwalten")
                                 Spacer()
                                 Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
                             }

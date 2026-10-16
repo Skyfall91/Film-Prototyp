@@ -147,6 +147,31 @@ enum PosterCache {
     private static var recent: [String] = []
     private static let memoryLimit = 48
     private static var loading: Set<String> = []
+    /// Mounted covers keep their decoded image while the catalog scrolls.
+    /// More than one view may display the same title (card, detail and morph).
+    private static var visibleReaders: [String: Int] = [:]
+
+    static func retainVisible(_ id: String) {
+        visibleReaders[id, default: 0] += 1
+        loadIfNeeded(id)
+    }
+
+    static func releaseVisible(_ id: String) {
+        if let count = visibleReaders[id], count > 1 { visibleReaders[id] = count - 1 }
+        else { visibleReaders[id] = nil }
+        trimMemory()
+    }
+
+    private static func loadIfNeeded(_ id: String) {
+        if slot(id).image == nil { load(id) }
+    }
+
+    private static func trimMemory() {
+        while recent.count > memoryLimit,
+              let index = recent.firstIndex(where: { visibleReaders[$0] == nil }) {
+            slots[recent.remove(at: index)]?.image = nil
+        }
+    }
 
     private static let folder: URL = {
         let url = URL.cachesDirectory.appending(path: "Posters", directoryHint: .isDirectory)
@@ -227,7 +252,7 @@ enum PosterCache {
         // Unscharfen Hintergrund gleich mit vorbereiten (im Hintergrund), damit er beim Nachrücken bereitliegt.
         BackdropBlur.thumbnailReady(id)
         // Ältestes Poster aus dem Speicher werfen; das kleine Vorschaubild bleibt.
-        while recent.count > memoryLimit { slots[recent.removeFirst()]?.image = nil }
+        trimMemory()
     }
 
     private static func touch(_ id: String) {

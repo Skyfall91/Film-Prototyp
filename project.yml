@@ -5,6 +5,10 @@ options:
     iOS: "26.0"
   createIntermediateGroups: true
 packages:
+  LightCode:
+    path: Packages/LightCode
+  FilmSync:
+    path: Packages/FilmSync
   YouTubeKit:
     url: https://github.com/alexeichhorn/YouTubeKit.git
     from: 0.4.9
@@ -28,12 +32,16 @@ targets:
         buildPhase: resources
     dependencies:
       - package: YouTubeKit
+      - package: LightCode
+      - package: FilmSync
     scheme: {}
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: de.beispiel.filmprototyp
         PRODUCT_NAME: FilmPrototyp
+        INFOPLIST_FILE: LocalNetworkInfo.plist
         INFOPLIST_KEY_CFBundleDisplayName: Film
+        INFOPLIST_KEY_NSCameraUsageDescription: "Scanne den Code auf deinem Apple TV, um die Anmeldung zu bestätigen."
         INFOPLIST_KEY_NSFaceIDUsageDescription: "Mit Face ID bestätigst du den Demo-Kauf, wie bei Apple Pay."
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
@@ -45,3 +53,63 @@ targets:
         MARKETING_VERSION: "0.1"
         CURRENT_PROJECT_VERSION: "1"
         DEVELOPMENT_LANGUAGE: de
+
+  FilmTV:
+    type: application
+    platform: tvOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: TV
+        excludes: ["Tests/**"]
+      - path: App/Model
+      - path: App/Engine
+      - path: App/Pairing
+      - path: App/Sync
+      - path: App/Resources
+        buildPhase: resources
+    dependencies:
+      - package: YouTubeKit
+      - package: LightCode
+      - package: FilmSync
+    scheme: {}
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: de.beispiel.filmprototyp
+        PRODUCT_NAME: FilmTV
+        INFOPLIST_FILE: LocalNetworkInfo.plist
+        INFOPLIST_KEY_CFBundleDisplayName: Film
+        INFOPLIST_KEY_UIUserInterfaceStyle: Dark
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "3"
+        MARKETING_VERSION: "0.1"
+        CURRENT_PROJECT_VERSION: "1"
+        DEVELOPMENT_LANGUAGE: de
+
+  FilmStateTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [Tests/AppState]
+    dependencies:
+      - target: FilmPrototyp
+    settings:
+      base:
+        SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
+        PRODUCT_BUNDLE_IDENTIFIER: de.beispiel.filmprototyp.tests
+        GENERATE_INFOPLIST_FILE: YES
+    scheme:
+      testTargets: [FilmStateTests]
+
+  FilmUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [Tests/UI]
+    dependencies:
+      - target: FilmPrototyp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: de.beispiel.filmprototyp.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
+    scheme:
+      testTargets: [FilmUITests]

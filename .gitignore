@@ -5,3 +5,5 @@ xcuserdata/
 build/
 .impeccable/
 shot.sh
+
+.build-*.log

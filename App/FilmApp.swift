@@ -13,6 +13,8 @@ struct FilmApp: App {
                 .preferredColorScheme(.dark)
                 .tint(store.accent)
                 .task(priority: .utility) { await PosterCache.prefetchAll(FilmIndex.all.map(\.id)) }
+                .task { try? await store.installCloudSync() }
+                .onChange(of: store.signedIn) { _, ready in if ready { Task { try? await store.installCloudSync() } } }
                 .onChange(of: scenePhase) { _, phase in if phase != .active { store.flush() } }
         }
     }
@@ -61,6 +63,7 @@ struct RootView: View {
                     .transition(.opacity)
             }
         }
+        .modifier(NearbyTVPairingPrompt())
         .animation(.smooth, value: store.onboardingDone)
         .animation(.smooth, value: store.hasChosenViewers)
         .animation(.smooth, value: store.signedIn)
@@ -79,11 +82,11 @@ struct MainTabs: View {
     @State private var hero = HeroCoordinator()
     var body: some View {
         TabView(selection: Bindable(store).selectedTab) {
-            Tab("Für dich", systemImage: "rectangle.stack.fill", value: 0) { ForYouView() }
-            Tab("Liste", systemImage: "bookmark.fill", value: 1) { WatchlistView() }
-            Tab("Katalog", systemImage: "square.grid.2x2.fill", value: 2) { CatalogView() }
-            Tab("Profil", systemImage: "person.crop.circle.fill", value: 3) { ProfileTabView() }
-            Tab("Suche", systemImage: "magnifyingglass", value: 4, role: .search) { MoodSearchView() }
+            Tab(FilmSection.forYou.title, systemImage: FilmSection.forYou.symbol, value: 0) { ForYouView() }
+            Tab(FilmSection.watchlist.title, systemImage: FilmSection.watchlist.symbol, value: 1) { WatchlistView() }
+            Tab(FilmSection.catalog.title, systemImage: FilmSection.catalog.symbol, value: 2) { CatalogView() }
+            Tab(FilmSection.profile.title, systemImage: FilmSection.profile.symbol, value: 3) { ProfileTabView() }
+            Tab(FilmSection.search.title, systemImage: FilmSection.search.symbol, value: 4, role: .search) { MoodSearchView() }
         }
         .tabBarMinimizeBehavior(.onScrollDown)
         // Solange Details offen sind, darf kein Tipper zu Knöpfen darunter durchrutschen
@@ -97,6 +100,3 @@ struct MainTabs: View {
 }
 
 /// Startparameter `-screen <name>` öffnet direkt einen Screen, für Folien-Screenshots.
-enum DemoScreen {
-    static let current = UserDefaults.standard.string(forKey: "screen")
-}

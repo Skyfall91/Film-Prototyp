@@ -10,6 +10,8 @@ Du musst nichts über Programmieren wissen. Mach einfach einen Schritt nach dem 
 > [!TIP]
 > Lies jeden Schritt **ganz**, bevor du klickst. Fett geschriebene Wörter (**so**) stehen genau so auf deinem Bildschirm.
 
+**Apple TV:** Die native TV-App liegt im selben Xcode-Projekt als Scheme **FilmTV**. Start, gemeinsames Design, Server-Einrichtung und Prüfstand stehen in [Apple-TV-Anleitung](docs/apple-tv.md).
+
 **Inhalt**
 - [✅ Bevor du anfängst](#-bevor-du-anfängst)
 - [💻 Teil 1: Auf dem Mac ausprobieren](#-teil-1-auf-dem-mac-ausprobieren) (hier anfangen)

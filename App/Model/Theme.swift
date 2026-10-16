@@ -3,6 +3,10 @@ import SwiftUI
 /// Akzentfarbe der App. Sie steht nur für Hauptaktion, Auswahl und Zustand, Farbe im Bild
 /// kommt sonst aus den Postern. Varianten für die Farbsuche: Startparameter `-palette <name>`.
 enum Theme {
+    static let background = Color.black
+    static func recommendationTitle(size: CGFloat) -> Font { .system(size: size, weight: .heavy, design: .rounded) }
+    static func filmTitle(size: CGFloat) -> Font { .system(size: size, weight: .semibold, design: .serif) }
+
     enum Palette: String, CaseIterable {
         /// Kinolicht: warmes Gold wie der Projektorstrahl im dunklen Saal.
         case honig
@@ -24,4 +28,11 @@ enum Theme {
         case .profil: profile?.color ?? Color(red: 0.36, green: 0.55, blue: 1.0)
         }
     }
+}
+
+/// One navigation vocabulary for phone and TV; platform layout remains native.
+enum FilmSection: Int, CaseIterable {
+    case forYou = 0, watchlist, catalog, profile, search
+    var title: String { switch self { case .forYou: "Für dich"; case .watchlist: "Liste"; case .catalog: "Katalog"; case .profile: "Profil"; case .search: "Suche" } }
+    var symbol: String { switch self { case .forYou: "rectangle.stack.fill"; case .watchlist: "bookmark.fill"; case .catalog: "square.grid.2x2.fill"; case .profile: "person.crop.circle.fill"; case .search: "magnifyingglass" } }
 }

@@ -21,7 +21,7 @@ struct FilmDetailView: View {
     var onClose: (() -> Void)? = nil
     var onPosterFrame: ((CGRect) -> Void)? = nil
     var onTitleFrame: ((CGRect) -> Void)? = nil
-    static let titleFont = Font.system(size: 34, weight: .semibold, design: .serif)
+    static let titleFont = Theme.filmTitle(size: 34)
     @State private var closing = false
     /// Vom linken Rand wischen: Die Seite schrumpft unter dem Finger und fliegt dann zurück.
     @State private var edgeDrag: CGFloat = 0

@@ -14,10 +14,12 @@ final class AccountRecord {
     var lastSignIn: Date
     /// Gespeicherter Zustand des Kontos (JSON).
     var state: Data
+    /// Verified Supabase account identity; never a bearer or refresh token.
+    var cloudUserID: String? = nil
 
-    init(email: String, passwordHash: String, salt: String, created: Date, lastSignIn: Date, state: Data) {
+    init(email: String, passwordHash: String, salt: String, created: Date, lastSignIn: Date, state: Data, cloudUserID: String? = nil) {
         self.email = email; self.passwordHash = passwordHash; self.salt = salt
-        self.created = created; self.lastSignIn = lastSignIn; self.state = state
+        self.created = created; self.lastSignIn = lastSignIn; self.state = state; self.cloudUserID = cloudUserID
     }
 }
 
@@ -26,10 +28,11 @@ final class AccountRecord {
 final class AccountDatabase {
     private let context: ModelContext?
 
-    init() {
+    init(inMemory: Bool = false) {
         let url = URL.applicationSupportDirectory.appending(path: "Konten.store")
         try? FileManager.default.createDirectory(at: .applicationSupportDirectory, withIntermediateDirectories: true)
-        let container = try? ModelContainer(for: AccountRecord.self, configurations: ModelConfiguration(url: url))
+        let configuration = inMemory ? ModelConfiguration(isStoredInMemoryOnly: true) : ModelConfiguration(url: url)
+        let container = try? ModelContainer(for: AccountRecord.self, configurations: configuration)
         context = container.map(ModelContext.init)
     }
 
@@ -45,16 +48,18 @@ final class AccountDatabase {
         return (try? context?.fetch(query).map(\.email)) ?? []
     }
 
-    func upsert(_ account: Account, state: Data, signedInNow: Bool = false) {
+    func upsert(_ account: Account, state: Data, signedInNow: Bool = false, cloudUserID: String? = nil) {
         guard let context else { return }
+        let verifiedID = cloudUserID.flatMap { UUID(uuidString: $0)?.uuidString.lowercased() }
         if let r = record(account.email) {
             r.passwordHash = account.passwordHash
             r.salt = account.salt
             r.state = state
+            if let verifiedID { r.cloudUserID = verifiedID }
             if signedInNow { r.lastSignIn = .now }
         } else {
             context.insert(AccountRecord(email: account.email, passwordHash: account.passwordHash, salt: account.salt,
-                                         created: account.created, lastSignIn: .now, state: state))
+                                         created: account.created, lastSignIn: .now, state: state, cloudUserID: verifiedID))
         }
         try? context.save()
     }
