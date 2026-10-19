@@ -7,7 +7,7 @@ enum BackdropBlur {
     private static var pending: Set<String> = []
     /// Die Karten im Stapel: nur für sie lohnt sich das Vorrechnen, und sie fliegen nie aus dem Speicher.
     private static var wanted: Set<String> = []
-    nonisolated(unsafe) private static let context = CIContext(options: [.useSoftwareRenderer: false])
+    nonisolated private static let context = CIContext(options: [.useSoftwareRenderer: false])
 
     static func image(_ filmID: String) -> UIImage? {
         if let cached = cache[filmID] { return cached }
@@ -33,9 +33,9 @@ enum BackdropBlur {
         for id in ids where cache[id] == nil && !pending.contains(id) {
             guard let cg = FilmIndex.film(id)?.posterThumbnail?.cgImage else { continue }
             pending.insert(id)
-            nonisolated(unsafe) let input = cg
+            let input = cg
             Task.detached(priority: .utility) {
-                nonisolated(unsafe) let out = blur(input)
+                let out = blur(input)
                 await MainActor.run {
                     pending.remove(id)
                     if let out { remember(id, UIImage(cgImage: out)) }

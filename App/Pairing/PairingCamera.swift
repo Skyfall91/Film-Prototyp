@@ -7,10 +7,10 @@ import LightCode
 
 /// No camera image leaves this object. Starting and stopping are bound to the
 /// visible scanner; light, QR and printed digits require two complete readings.
-final class PairingCamera: NSObject, ObservableObject, @unchecked Sendable, AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptureMetadataOutputObjectsDelegate {
+nonisolated final class PairingCamera: NSObject, ObservableObject, @unchecked Sendable, AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptureMetadataOutputObjectsDelegate {
     let session=AVCaptureSession()
-    @Published var message:String?
-    @Published var detectedCode:String?
+    @MainActor @Published var message:String?
+    @MainActor @Published var detectedCode:String?
     private let queue=DispatchQueue(label:"film.pairing.camera")
     private var readings=ConsistentLightReadings()
     private var configured=false
@@ -35,7 +35,7 @@ final class PairingCamera: NSObject, ObservableObject, @unchecked Sendable, AVCa
             do {
                 if !self.configured {try self.configure();self.configured=true}
                 if self.active,!self.session.isRunning {self.session.startRunning()}
-            } catch {DispatchQueue.main.async {self.message="Die Kamera ist nicht verfügbar. Gib den Code unten ein."}}
+            } catch {Task { @MainActor in self.message="Die Kamera ist nicht verfügbar. Gib den Code unten ein."}}
         }
     }
     @MainActor func stop() {wantsCamera=false;queue.async {[weak self] in guard let self else {return};self.active=false;self.readings.reset();if self.session.isRunning {self.session.stopRunning()} } }
@@ -80,7 +80,7 @@ final class PairingCamera: NSObject, ObservableObject, @unchecked Sendable, AVCa
         if now-lastCandidateTime>1.5 {readings.reset()};lastCandidateTime=now
         guard let consistent=readings.accept(code) else {return};accepted=true;active=false
         if session.isRunning {session.stopRunning()}
-        DispatchQueue.main.async {[weak self] in self?.detectedCode=consistent}
+        Task { @MainActor [weak self] in self?.detectedCode=consistent}
     }
     private func decode(buffer:CVPixelBuffer,rectangle:VNRectangleObservation) -> String? {
         let image=CIImage(cvPixelBuffer:buffer),width=image.extent.width,height=image.extent.height

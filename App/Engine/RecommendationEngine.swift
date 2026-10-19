@@ -237,7 +237,9 @@ enum TasteModel {
                 for j in 0...i {
                     var value = m[i][j]
                     if j > 0 {
-                        value -= cblas_ddot(Int32(j), l.baseAddress! + i * n, 1, l.baseAddress! + j * n, 1)
+                        var dot = 0.0
+                        vDSP_dotprD(l.baseAddress! + i * n, 1, l.baseAddress! + j * n, 1, &dot, vDSP_Length(j))
+                        value -= dot
                     }
                     if i == j {
                         guard value > 0, value.isFinite else { valid = false; return }

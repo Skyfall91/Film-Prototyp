@@ -836,10 +836,10 @@ struct RedactedText: View {
         var result = Text("")
         var rest = Substring(string)
         while let match = rest.firstMatch(of: /\*+/) {
-            result = result + Text(rest[..<match.range.lowerBound])
-                + Text(String(repeating: "█", count: match.output.count)).accessibilityLabel("geschwärzt")
+            let hidden = Text(String(repeating: "█", count: match.output.count)).accessibilityLabel("geschwärzt")
+            result = Text("\(result)\(Text(rest[..<match.range.lowerBound]))\(hidden)")
             rest = rest[match.range.upperBound...]
         }
-        return result + Text(rest)
+        return Text("\(result)\(Text(rest))")
     }
 }

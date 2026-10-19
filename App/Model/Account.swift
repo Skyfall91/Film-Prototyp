@@ -174,7 +174,7 @@ final class PurchaseService {
         updates = Task {
             for await result in Transaction.updates {
                 if case .verified(let t) = result { await t.finish() }
-                await onChange(await currentSubscription())
+                onChange(await currentSubscription())
             }
         }
     }
