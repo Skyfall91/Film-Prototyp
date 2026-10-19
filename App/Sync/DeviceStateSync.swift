@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 import Observation
 import FilmSync
 import LightCode
@@ -26,6 +27,7 @@ final class DeviceStateSync {
     @ObservationIgnored private var starting = false
     @ObservationIgnored private var stopped = false
     @ObservationIgnored private var ready = false
+    @ObservationIgnored private var signal: SyncSignal?
     private var outbox: SyncOutbox
     var revision: Int { outbox.revision ?? 0 }
     var conflicts: [SyncConflict] { outbox.conflicts }
@@ -43,6 +45,7 @@ final class DeviceStateSync {
             else if let legacy = try? JSONDecoder().decode([SyncOperation].self, from: data) { restored.importLegacy(legacy) }
         }
         outbox = restored
+        signal = SyncSignal(userID: userID) { [weak self] in self?.signalReceived() }
         if !restored.pending.isEmpty || !restored.conflicts.isEmpty {
             try? store.applyCloudSnapshot(restored.projectedState().data())
         }
@@ -64,6 +67,7 @@ final class DeviceStateSync {
     /// local recorder, so an offline app never falls back to snapshot upserts.
     func startRetrying() {
         guard active, reader == nil else { return }
+        signal?.connect()
         reader = Task { [weak self] in
             while !Task.isCancelled {
                 do {
@@ -130,6 +134,8 @@ final class DeviceStateSync {
             }
             guard active else { throw CancellationError() }
             sending = true; defer { sending = false }
+            var delivered = false
+            defer { if delivered { signal?.notify() } }
             var isolateFailures = false
             var retriedRevision: Int?
             while active && !outbox.pending.isEmpty {
@@ -144,6 +150,7 @@ final class DeviceStateSync {
                     try check(reply)
                     try captureCurrent()
                     outbox.acknowledge(Set(batch.map { $0.operation.id }), server: reply.state, revision: reply.revision)
+                    delivered = true
                     try persistOutbox(); try applyProjection()
                     retriedRevision = nil
                 } catch PairingClientError.server(let status, let code) where status == 400 || status == 409 {
@@ -195,7 +202,21 @@ final class DeviceStateSync {
         try await flush()
     }
 
+    /// App kommt nach vorn: Signal-Verbindung wieder aufbauen und sofort nachsehen, was es Neues gibt.
+    func wake() {
+        guard active else { return }
+        signal?.connect()
+        Task { try? await refresh() }
+    }
+
+    /// Ein anderes Gerät dieses Kontos hat gerade etwas gespeichert.
+    private func signalReceived() {
+        guard active else { return }
+        Task { try? await refresh() }
+    }
+
     func stop() {
+        signal?.stop(); signal = nil
         stopped = true; sender?.cancel(); reader?.cancel(); sender = nil; reader = nil
         try? persistOutbox()
     }
@@ -256,4 +277,91 @@ final class DeviceStateSync {
         }
     }
     deinit { sender?.cancel(); reader?.cancel() }
+}
+
+/// Kurzes Signal „Es gibt Neues“ zwischen den Geräten eines Kontos, über Supabase Realtime.
+/// Es trägt keine Daten: Wer es hört, holt den Stand wie bisher über die geprüfte Funktion.
+/// Der Kanalname ist ein Hash der Konto-ID. Fällt die Verbindung aus, bleibt das Nachfragen alle 8 s.
+@MainActor
+final class SyncSignal {
+    private let topic: String
+    private let onSignal: @MainActor () -> Void
+    private var socket: URLSessionWebSocketTask?
+    private var heartbeat: Task<Void, Never>?
+    private var retry: Task<Void, Never>?
+    private var ref = 0
+    private var stopped = false
+
+    init(userID: String, onSignal: @escaping @MainActor () -> Void) {
+        let digest = SHA256.hash(data: Data(("film-sync|" + userID.lowercased()).utf8))
+        topic = "realtime:film-" + digest.prefix(16).map { String(format: "%02x", $0) }.joined()
+        self.onSignal = onSignal
+    }
+
+    func connect() {
+        guard !stopped, socket == nil else { return }
+        retry?.cancel(); retry = nil
+        var url = URLComponents(url: CloudAccounts.backendURL.appending(path: "realtime/v1/websocket"), resolvingAgainstBaseURL: false)!
+        url.scheme = "wss"
+        url.queryItems = [URLQueryItem(name: "apikey", value: CloudAccounts.pairingPublishableKey),
+                          URLQueryItem(name: "vsn", value: "1.0.0")]
+        guard let address = url.url else { return }
+        let task = URLSession.shared.webSocketTask(with: address)
+        socket = task
+        task.resume()
+        send(topic, "phx_join", ["config": ["broadcast": ["self": false], "private": false]])
+        Task { [weak self] in await self?.listen(task) }
+        heartbeat = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(25))
+                guard !Task.isCancelled else { return }
+                self?.send("phoenix", "heartbeat", [:])
+            }
+        }
+    }
+
+    /// Den anderen Geräten sagen, dass es Neues gibt.
+    func notify() {
+        send(topic, "broadcast", ["type": "broadcast", "event": "changed", "payload": [String: Any]()])
+    }
+
+    func stop() {
+        stopped = true
+        retry?.cancel(); retry = nil
+        drop()
+    }
+
+    private func listen(_ task: URLSessionWebSocketTask) async {
+        while let message = try? await task.receive() {
+            if case .string(let text) = message,
+               let json = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any],
+               json["event"] as? String == "broadcast" {
+                onSignal()
+            }
+        }
+        // Verbindung weg (Funkloch, Hintergrund): nach kurzer Pause neu verbinden.
+        guard socket === task else { return }
+        drop()
+        guard !stopped else { return }
+        retry = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled else { return }
+            self?.connect()
+        }
+    }
+
+    private func drop() {
+        heartbeat?.cancel(); heartbeat = nil
+        socket?.cancel(with: .goingAway, reason: nil)
+        socket = nil
+    }
+
+    private func send(_ topic: String, _ event: String, _ payload: [String: Any]) {
+        guard let socket else { return }
+        ref += 1
+        let message: [String: Any] = ["topic": topic, "event": event, "payload": payload, "ref": String(ref)]
+        guard let data = try? JSONSerialization.data(withJSONObject: message),
+              let text = String(data: data, encoding: .utf8) else { return }
+        socket.send(.string(text)) { _ in }
+    }
 }

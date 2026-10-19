@@ -17,7 +17,7 @@ struct FilmTVApp: App {
                 .preferredColorScheme(.dark)
                 .task(priority: .utility) { await PosterCache.prefetchAll(FilmIndex.all.map(\.id)) }
                 .onChange(of: scenePhase) { _, phase in
-                    if phase != .active { store.flush() }
+                    if phase == .active { store.deviceSync?.wake() } else { store.flush() }
                 }
         }
     }

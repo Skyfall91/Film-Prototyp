@@ -15,7 +15,7 @@ struct FilmApp: App {
                 .task(priority: .utility) { await PosterCache.prefetchAll(FilmIndex.all.map(\.id)) }
                 .task { try? await store.installCloudSync() }
                 .onChange(of: store.signedIn) { _, ready in if ready { Task { try? await store.installCloudSync() } } }
-                .onChange(of: scenePhase) { _, phase in if phase != .active { store.flush() } }
+                .onChange(of: scenePhase) { _, phase in if phase == .active { store.deviceSync?.wake() } else { store.flush() } }
         }
     }
 }
