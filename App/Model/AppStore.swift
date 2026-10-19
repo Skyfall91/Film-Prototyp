@@ -86,8 +86,39 @@ final class AppStore {
         didSet { UserDefaults.standard.set(homeSwipeCount, forKey: "homeSwipeCount") }
     }
 
+    /// „Heute nicht“ gilt bis Mitternacht, auch über einen Neustart hinweg, und für jede Runde
+    /// (wer gerade schaut) getrennt. Wechselt die Runde, kommen ihre eigenen Skips zurück.
+    var skippedToday: Set<String> = [] { didSet { storeSkipped() } }
+
+    private static let skippedKey = "skippedToday"
+    private var viewerGroup: String { activeProfileIDs.map(\.uuidString).sorted().joined(separator: ",") }
+    private static var today: String { Date.now.formatted(.iso8601.year().month().day()) }
+
+    private func storedSkips() -> [String: [String]] {
+        guard !suppressPersistence, let saved = UserDefaults.standard.dictionary(forKey: Self.skippedKey),
+              saved["day"] as? String == Self.today else { return [:] }
+        return saved["groups"] as? [String: [String]] ?? [:]
+    }
+
+    private func storeSkipped() {
+        guard !suppressPersistence else { return }
+        var groups = storedSkips()
+        groups[viewerGroup] = skippedToday.isEmpty ? nil : Array(skippedToday)
+        UserDefaults.standard.set(["day": Self.today, "groups": groups], forKey: Self.skippedKey)
+    }
+
+    /// Die heutigen Skips der aktuellen Runde wiederherstellen.
+    private func restoreSkipped() {
+        let saved = Set(storedSkips()[viewerGroup] ?? [])
+        if saved != skippedToday { skippedToday = saved }
+    }
+
+    private func forgetSkipped() {
+        if !suppressPersistence { UserDefaults.standard.removeObject(forKey: Self.skippedKey) }
+        skippedToday = []
+    }
+
     // Sitzungszustand (nicht gespeichert)
-    var skippedToday: Set<String> = []
     var runtimeFilter: RuntimeFilter? = nil
     var kindFilter: KindFilter = .all
     var hasChosenViewers = false
@@ -212,7 +243,7 @@ final class AppStore {
         CloudAccounts.signOut()
         signedIn = false
         hasChosenViewers = false
-        skippedToday = []; undoStack = []
+        undoStack = []; forgetSkipped()
         save()
     }
 
@@ -238,7 +269,7 @@ final class AppStore {
     /// Profile und Sitzung leeren (beim Wechsel zu einem anderen Konto).
     private func clearSession() {
         profiles = []; activeProfileIDs = []; onboardingDone = false; pendingRatings = []
-        skippedToday = []; undoStack = []; runtimeFilter = nil; kindFilter = .all; hasChosenViewers = false
+        undoStack = []; runtimeFilter = nil; kindFilter = .all; hasChosenViewers = false; forgetSkipped()
     }
 
     func subscribe(_ sub: Subscription) {
@@ -267,7 +298,7 @@ final class AppStore {
     func chooseViewers(_ ids: [UUID]) {
         activeProfileIDs = profiles.map(\.id).filter { ids.contains($0) && !isPaused($0) }
         hasChosenViewers = true
-        skippedToday = []
+        restoreSkipped()
         save()
     }
     var canUndo: Bool { !undoStack.isEmpty }
@@ -509,7 +540,7 @@ final class AppStore {
     func resetAll() {
         profiles = []; activeProfileIDs = []; onboardingDone = false; pendingRatings = []
         if account == nil { signedIn = false }
-        skippedToday = []; undoStack = []; runtimeFilter = nil; kindFilter = .all; hasChosenViewers = false
+        undoStack = []; runtimeFilter = nil; kindFilter = .all; hasChosenViewers = false; forgetSkipped()
         save()
     }
 
@@ -763,6 +794,7 @@ final class AppStore {
         onboardingDone = snap.onboardingDone
         pendingRatings = snap.pendingRatings
         account = snap.account
+        restoreSkipped()
         // Beim Start wählt man wie bei Netflix, wer schaut, außer es gibt nur ein Profil.
         hasChosenViewers = profiles.count <= 1
     }

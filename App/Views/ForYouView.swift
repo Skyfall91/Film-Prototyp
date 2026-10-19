@@ -328,7 +328,6 @@ struct ForYouView: View {
     }
 
     private func handle(_ direction: SwipeDirection, _ film: Film) {
-        ownChange = direction != .up
         let rec = direction == .up ? nil : queue.first(where: { $0.film.id == film.id })
         defer { if let rec { advance(past: rec) } }
         if rec != nil { store.homeSwipeCount += 1 }
@@ -354,6 +353,9 @@ struct ForYouView: View {
         Task {
             try? await Task.sleep(for: .milliseconds(700))
             guard let i = pendingWork.firstIndex(where: { $0.id == id }) else { return }
+            // Erst hier als eigene Änderung markieren: Sonst baut ein später verarbeiteter Swipe
+            // den ganzen Stapel neu auf, z. B. während gerade die Details der obersten Karte aufgehen.
+            ownChange = true
             pendingWork.remove(at: i).work()
         }
     }
