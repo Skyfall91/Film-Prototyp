@@ -82,8 +82,8 @@ struct SwipeDeck<Item: Identifiable, Card: View>: View {
         }
     }
 
-    /// Sichtbar federnd: Die neue Karte schießt ein Stück über ihr Ziel und setzt sich dann.
-    private static var advance: Animation { .spring(response: 0.48, dampingFraction: 0.6) }
+    /// Weich federnd: Die neue Karte setzt sich mit einem kleinen Nachschwingen, ohne zu hüpfen.
+    private static var advance: Animation { .spring(response: 0.55, dampingFraction: 0.78) }
 
     // Hintere Karten rücken anteilig zum Ziehfortschritt der vorderen nach vorne.
     // Beim Ziehen kommt die nächste Karte nur ein kleines Stück, damit beim Loslassen
@@ -235,13 +235,15 @@ struct SwipeCard<Content: View>: View {
             }
     }
 
-    /// Vertikale Richtungen ohne Abflug („Details“) bekommen Gummiband-Widerstand, /// nur vertikal. Seitwärts bleibt die Karte frei beweglich.
+    /// Richtungen ohne Abflug („Details“) folgen dem Finger bis zur Schwelle genau wie die anderen,
+    /// erst danach greift der Gummiband-Widerstand. So ist der Weg in alle vier Richtungen gleich lang.
     private func resisted(_ t: CGSize) -> CGSize {
         let d: SwipeDirection = t.height < 0 ? .up : .down
-        guard t.height != 0, options[d]?.flyOut == false else { return t }
-        let limit = threshold * 1.4
+        guard abs(t.height) > threshold, options[d]?.flyOut == false else { return t }
+        let extra = threshold * 0.4
         let sign: CGFloat = t.height < 0 ? -1 : 1
-        return CGSize(width: t.width, height: sign * limit * (1 - exp(-abs(t.height) / limit)))
+        let beyond = abs(t.height) - threshold
+        return CGSize(width: t.width, height: sign * (threshold + extra * (1 - exp(-beyond / extra))))
     }
 
     private func commit(_ direction: SwipeDirection, velocity: CGSize) {
@@ -272,14 +274,16 @@ struct SwipeCard<Content: View>: View {
         var dir = length > 30 ? CGVector(dx: offset.width / length, dy: offset.height / length) : axis
         // Nie mehr als ~40° von der gewählten Achse abweichen.
         if dir.dx * axis.dx + dir.dy * axis.dy < 0.75 { dir = axis }
-        let travel: CGFloat = 1300
+        // Kurzer Weg, längere Dauer: Die Karte bleibt sichtbar, bis sie den Rand verlässt,
+        // und läuft dabei weich aus, statt schlagartig zu verschwinden.
+        let travel: CGFloat = 760
         let target = CGSize(width: offset.width + dir.dx * travel, height: offset.height + dir.dy * travel)
-        // Schwung aus der Geste übernehmen: Die Karte startet genau so schnell, wie der Finger war,
-        // und läuft erst außerhalb des Bildschirms aus. Kein Ruck beim Loslassen.
-        let speed = min(max(hypot(velocity.width, velocity.height), 1400), 4000)
-        let duration = Double(min(max(travel / speed * 1.25, 0.32), 0.5))
-        let startSlope = min(Double(speed) * duration / Double(travel), 3)
-        withAnimation(.timingCurve(0.25, 0.25 * startSlope, 0.6, 1, duration: duration)) { offset = target }
+        // Schwung aus der Geste übernehmen: Die Karte startet genau so schnell, wie der Finger war.
+        // Kein Ruck beim Loslassen.
+        let speed = min(max(hypot(velocity.width, velocity.height), 1100), 3200)
+        let duration = Double(min(max(travel / speed * 1.7, 0.45), 0.62))
+        let startSlope = min(Double(speed) * duration / Double(travel), 2.4)
+        withAnimation(.timingCurve(0.3, 0.3 * startSlope, 0.45, 1, duration: duration)) { offset = target }
         onCommit(direction, duration)
     }
 
