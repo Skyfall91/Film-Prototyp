@@ -243,57 +243,45 @@ struct FilmDetailView: View {
         HStack(alignment: .top, spacing: 0) {
             if let imdb = film.imdbRating {
                 let value = imdb.formatted(.number.precision(.fractionLength(1)))
-                score(source: "IMDb", caption: "Zuschauer", value: value, spoken: value,
-                      url: "https://www.imdb.com/title/\(film.imdbID)/") {
+                score(value, source: "IMDb", spoken: value, url: "https://www.imdb.com/title/\(film.imdbID)/") {
                     Text("IMDb")
-                        .font(.system(size: 12, weight: .black)).foregroundStyle(.black)
-                        .padding(.horizontal, 5).padding(.vertical, 3)
-                        .background(Color(red: 0.96, green: 0.77, blue: 0.09), in: .rect(cornerRadius: 4))
+                        .font(.system(size: 10, weight: .black)).foregroundStyle(.black)
+                        .padding(.horizontal, 4).padding(.vertical, 1.5)
+                        .background(Color(red: 0.96, green: 0.77, blue: 0.09), in: .rect(cornerRadius: 3))
                 }
             }
             if let rt = film.rottenTomatoes {
-                score(source: "Rotten Tomatoes", caption: "Kritiker", value: "\(rt) %", spoken: "\(rt) Prozent",
+                score("\(rt) %", source: "Rotten Tomatoes", spoken: "\(rt) Prozent",
                       url: "https://www.rottentomatoes.com/search?search=\(query)") {
-                    Text(rt >= 60 ? "🍅" : "🤢").font(.system(size: 18))
+                    Text(rt >= 60 ? "🍅" : "🤢").font(.system(size: 11))
+                    Text("Tomatometer")
                 }
             }
             if let mc = film.metascore {
-                // Beim Metascore ist das Feld selbst die Zahl.
-                score(source: "Metacritic", caption: "Metascore", value: nil, spoken: "\(mc)",
-                      url: "https://www.metacritic.com/search/\(query)/") {
-                    Text("\(mc)")
-                        .font(.system(size: 15, weight: .heavy)).foregroundStyle(.white)
-                        .frame(width: 30, height: 26)
-                        .background(mc >= 61 ? Color(red: 0.4, green: 0.8, blue: 0.2) : mc >= 40 ? Color(red: 0.95, green: 0.75, blue: 0.1) : .red,
-                                    in: .rect(cornerRadius: 4))
+                score("\(mc)", source: "Metacritic", spoken: "\(mc)", url: "https://www.metacritic.com/search/\(query)/") {
+                    RoundedRectangle(cornerRadius: 2.5)
+                        .fill(mc >= 61 ? Color(red: 0.4, green: 0.8, blue: 0.2) : mc >= 40 ? Color(red: 0.95, green: 0.75, blue: 0.1) : .red)
+                        .frame(width: 10, height: 10)
+                    Text("Metascore")
                 }
             }
         }
     }
 
-    /// Die Zahl steht mittig über der Beschriftung, das Zeichen der Quelle hängt links daneben.
-    private func score<Mark: View>(source: String, caption: String, value: String?, spoken: String, url: String,
+    /// Oben groß die Zahl, darunter klein die Quelle mit ihrem Zeichen. Alles mittig.
+    private func score<Mark: View>(_ value: String, source: String, spoken: String, url: String,
                                    @ViewBuilder mark: () -> Mark) -> some View {
         Link(destination: URL(string: url)!) {
-            VStack(spacing: 4) {
-                Group {
-                    if let value {
-                        Text(value)
-                            .overlay(alignment: .leading) {
-                                mark().fixedSize().alignmentGuide(.leading) { $0[.trailing] + 6 }
-                            }
-                    } else {
-                        mark()
-                    }
-                }
-                .font(.system(size: 19, weight: .semibold))
-                .monospacedDigit()
-                .frame(height: 28)
-                Text(caption)
+            VStack(spacing: 5) {
+                Text(value)
+                    .font(.system(size: 22, weight: .semibold, design: .serif))
+                    .monospacedDigit()
+                HStack(spacing: 4) { mark() }
                     .font(.caption2.weight(.medium))
                     .foregroundStyle(.secondary)
+                    .frame(height: 14)
             }
-            .frame(width: 124)
+            .frame(width: 116)
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
