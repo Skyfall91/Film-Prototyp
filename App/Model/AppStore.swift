@@ -551,10 +551,12 @@ final class AppStore {
         return Self.onlineState(try JSONEncoder().encode(snap))
     }
 
-    func applyCloudSnapshot(_ data: Data) throws {
+    /// `fromOtherDevice: false` heißt: Der Server bestätigt nur, was dieses Gerät selbst geschickt hat.
+    /// Dann bleiben „Rückgängig“ und der Kartenstapel unangetastet, sonst springt nach jedem Swipe alles.
+    func applyCloudSnapshot(_ data: Data, fromOtherDevice: Bool = true) throws {
         let snapshot = try JSONDecoder().decode(Snapshot.self, from: data)
         let selection = activeProfileIDs, localAccount = account
-        if profiles != snapshot.profiles { undoStack = [] }
+        if fromOtherDevice, profiles != snapshot.profiles { undoStack = [] }
         profiles = snapshot.profiles
         pendingRatings = snapshot.pendingRatings
         onboardingDone = snapshot.onboardingDone || profiles.contains(where: \.onboardingComplete)
@@ -566,7 +568,7 @@ final class AppStore {
         activeProfileIDs = selection.filter { id in profiles.contains{ $0.id == id } && !isPaused(id) }
         if activeProfileIDs.isEmpty, let first = profiles.first { activeProfileIDs = [first.id] }
         if activeProfileIDs.isEmpty { hasChosenViewers = false }
-        tasteRevision += 1
+        if fromOtherDevice { tasteRevision += 1 }
         if !suppressPersistence { persistWithoutPush() }
     }
 

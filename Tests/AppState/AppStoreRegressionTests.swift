@@ -13,6 +13,21 @@ final class AppStoreRegressionTests: XCTestCase {
         XCTAssertEqual(store.activeProfileIDs,[b.id])
         XCTAssertEqual(store.profiles.map(\.name),["A","B"])
     }
+    @MainActor func testOwnSyncConfirmationKeepsUndoAndDeck() throws {
+        let store=AppStore(ephemeral:true)
+        let profile=Profile(name:"A",colorIndex:0,avatar:"scifi-0")
+        store.profiles=[profile];store.activeProfileIDs=[profile.id]
+        let film=try XCTUnwrap(FilmIndex.film("dune"))
+        store.apply(.notToday,to:film)
+        XCTAssertTrue(store.canUndo)
+        // Der Server bestätigt den eigenen Swipe und liefert den Stand leicht anders normalisiert zurück.
+        var confirmed=store.profiles[0];confirmed.weights=[:]
+        let snapshot=AppStore.Snapshot(profiles:[confirmed],activeProfileIDs:[],onboardingDone:true,pendingRatings:[],account:nil,signedIn:nil)
+        let revision=store.tasteRevision
+        try store.applyCloudSnapshot(JSONEncoder().encode(snapshot),fromOtherDevice:false)
+        XCTAssertTrue(store.canUndo)
+        XCTAssertEqual(store.tasteRevision,revision)
+    }
     @MainActor func testRemoteProfileChangeInvalidatesBroadUndo() throws {
         let store=AppStore(ephemeral:true)
         let profile=Profile(name:"A",colorIndex:0,avatar:"scifi-0")

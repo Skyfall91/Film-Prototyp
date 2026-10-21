@@ -149,9 +149,12 @@ final class DeviceStateSync {
                     let reply: CloudStateReply = try await client.post(route: "applyMutations", body: body, bearerToken: credential, as: CloudStateReply.self)
                     try check(reply)
                     try captureCurrent()
+                    // Jeder neue Vorgang zählt die Revision um eins hoch. Liegt sie danach noch höher,
+                    // hat zwischendurch ein anderes Gerät gespeichert.
+                    let foreign = reply.revision > revision + batch.count
                     outbox.acknowledge(Set(batch.map { $0.operation.id }), server: reply.state, revision: reply.revision)
                     delivered = true
-                    try persistOutbox(); try applyProjection()
+                    try persistOutbox(); try applyProjection(fromOtherDevice: foreign)
                     retriedRevision = nil
                 } catch PairingClientError.server(let status, let code) where status == 400 || status == 409 {
                     let reply = try await readCurrentState()
@@ -183,10 +186,11 @@ final class DeviceStateSync {
         do {
             guard active, !sending else { return }
             try await flush()
+            let known = revision
             let reply = try await readCurrentState()
             try captureCurrent()
             outbox.reconcile(server: reply.state, revision: reply.revision)
-            try persistOutbox(); try applyProjection()
+            try persistOutbox(); try applyProjection(fromOtherDevice: reply.revision != known)
             updateStatus()
         } catch { handle(error); throw error }
     }
@@ -243,9 +247,9 @@ final class DeviceStateSync {
     private func check(_ reply: CloudStateReply) throws {
         guard active, reply.userID.lowercased() == userID, reply.email == store?.account?.email else { throw CancellationError() }
     }
-    private func applyProjection() throws {
+    private func applyProjection(fromOtherDevice: Bool = true) throws {
         guard active, let store else { throw CancellationError() }
-        try store.applyCloudSnapshot(outbox.projectedState().data())
+        try store.applyCloudSnapshot(outbox.projectedState().data(), fromOtherDevice: fromOtherDevice)
     }
     private func persistOutbox() throws {
         let data = try JSONEncoder().encode(outbox)
