@@ -137,63 +137,61 @@ struct FilmDetailView: View {
 
     /// Das Cover ist die Lichtquelle der Seite: groß in der Mitte, sein eigener Schein fällt in den Raum.
     /// Darunter die Kritiken mit den Zeichen ihrer Quellen, dann Titel und Entscheidung.
+    /// Oben groß das Cover, darunter linksbündig und dicht: Titel, eine Zeile Fakten, Kritiken,
+    /// warum es passt, dann die Aktionen. Wie in der TV-App, nicht wie ein zentriertes Plakat.
     private func hero(_ rec: Recommendation) -> some View {
-        VStack(spacing: 0) {
-            PosterView(film: film, cornerRadius: 14, showsBadge: false)
+        VStack(alignment: .leading, spacing: 0) {
+            PosterView(film: film, cornerRadius: 16, showsBadge: false)
                 .matchedTransitionSource(id: film.id, in: playerNS)
-                .containerRelativeFrame(.horizontal) { w, _ in min(w * 0.62, 320) }
-                .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.white.opacity(0.12), lineWidth: 0.5))
-                .shadow(color: .black.opacity(0.5), radius: 18, y: 10)
+                .containerRelativeFrame(.horizontal) { w, _ in min(w * 0.8, 420) }
+                .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.white.opacity(0.12), lineWidth: 0.5))
+                .shadow(color: .black.opacity(0.5), radius: 22, y: 12)
                 .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { onPosterFrame?($0) }
                 .opacity(posterHidden ? 0 : 1)
-            .padding(.top, onClose == nil ? 36 : 56)
+                .frame(maxWidth: .infinity)
+                .padding(.top, onClose == nil ? 24 : 60)
 
-            laurels
-                .padding(.top, 26)
-
-            VStack(spacing: 10) {
-                Label(film.isSeries ? "Serie · Folgen à \(film.runtimeText)" : "Film",
-                      systemImage: film.isSeries ? "tv" : "film")
-                    .font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
-                if film.comingSoon {
-                    Text(film.releaseNote ?? "Demnächst")
-                        .font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
-                }
+            VStack(alignment: .leading, spacing: 6) {
                 Text(film.title)
                     .font(Self.titleFont)
-                    .multilineTextAlignment(.center)
                     .lineLimit(3).minimumScaleFactor(0.75)
                     .fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: 7) {
+                HStack(spacing: 6) {
+                    Image(systemName: film.isSeries ? "tv" : "film")
                     Text(film.yearText)
                     Text("·")
                     Text(film.isSeries ? film.seasonsText : film.runtimeText)
                     FSKBadge(fsk: film.fsk)
                 }
                 .font(.subheadline).foregroundStyle(.secondary)
+                if film.comingSoon {
+                    Text(film.releaseNote ?? "Demnächst")
+                        .font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                }
                 if film.originalTitle != film.title, !film.title.hasPrefix(film.originalTitle) {
                     Text(film.originalTitle).font(.footnote).foregroundStyle(.tertiary)
                 }
             }
-            .padding(.horizontal, 28)
             .padding(.top, 22)
+
+            laurels
+                .padding(.top, 14)
 
             if !film.comingSoon {
                 HStack(spacing: 10) {
-                    MatchRing(match: shownMatch, target: rec.match, size: 34)
+                    MatchRing(match: shownMatch, target: rec.match, size: 30)
                     Text(rec.reason)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
-                .padding(.top, 18)
-                .padding(.horizontal, 28)
+                .padding(.top, 14)
             }
 
             actions
-                .padding(.horizontal, 20)
-                .padding(.top, 24)
+                .padding(.top, 18)
         }
+        .padding(.horizontal, 20)
     }
 
     /// Die Redaktion wie auf einem Kinoplakat zur Award-Saison: das Cover als Bühne,
@@ -239,58 +237,44 @@ struct FilmDetailView: View {
         .accessibilityElement(children: .contain)
     }
 
-    /// Kritiken mit dem Zeichen der jeweiligen Quelle: IMDb-Schild, Tomate, Metascore-Feld.
-    /// Antippen öffnet die Quelle.
+    /// Kritiken als eine ruhige Reihe: Zeichen der Quelle und Zahl, Antippen öffnet die Quelle.
     private var laurels: some View {
-        HStack(alignment: .top, spacing: 0) {
+        HStack(spacing: 18) {
             if let imdb = film.imdbRating {
                 let value = imdb.formatted(.number.precision(.fractionLength(1)))
-                score(source: "IMDb", caption: "Zuschauer", spoken: value, nudge: 3, url: "https://www.imdb.com/title/\(film.imdbID)/") {
+                score(source: "IMDb", spoken: value, url: "https://www.imdb.com/title/\(film.imdbID)/") {
                     Text("IMDb")
-                        .font(.system(size: 13, weight: .black)).foregroundStyle(.black)
-                        .padding(.horizontal, 6)
-                        .frame(height: 24)
-                        .background(Color(red: 0.96, green: 0.77, blue: 0.09), in: .rect(cornerRadius: 5))
+                        .font(.system(size: 11, weight: .black)).foregroundStyle(.black)
+                        .padding(.horizontal, 5).frame(height: 20)
+                        .background(Color(red: 0.96, green: 0.77, blue: 0.09), in: .rect(cornerRadius: 4))
                     Text(value)
                 }
             }
             if let rt = film.rottenTomatoes {
-                score(source: "Rotten Tomatoes", caption: "Kritiker", spoken: "\(rt) Prozent", nudge: 2,
-                      url: "https://www.rottentomatoes.com/search?search=\(query)") {
-                    // Emojis haben seitlich Luft: optisch auf denselben Abstand wie die Schilder ziehen.
-                    Text(rt >= 60 ? "🍅" : "🤢").font(.system(size: 20)).padding(.horizontal, -2)
+                score(source: "Rotten Tomatoes", spoken: "\(rt) Prozent", url: "https://www.rottentomatoes.com/search?search=\(query)") {
+                    Text(rt >= 60 ? "🍅" : "🤢").font(.system(size: 16))
                     Text("\(rt) %")
                 }
             }
             if let mc = film.metascore {
-                score(source: "Metacritic", caption: "Metascore", spoken: "\(mc)", url: "https://www.metacritic.com/search/\(query)/") {
+                score(source: "Metacritic", spoken: "\(mc)", url: "https://www.metacritic.com/search/\(query)/") {
                     Text("\(mc)")
-                        .font(.system(size: 15, weight: .heavy)).foregroundStyle(.white)
+                        .font(.system(size: 12, weight: .heavy)).foregroundStyle(.white)
                         .monospacedDigit()
-                        .frame(width: 34, height: 24)
+                        .frame(width: 26, height: 20)
                         .background(mc >= 61 ? Color(red: 0.4, green: 0.8, blue: 0.2) : mc >= 40 ? Color(red: 0.95, green: 0.75, blue: 0.1) : .red,
-                                    in: .rect(cornerRadius: 5))
+                                    in: .rect(cornerRadius: 4))
+                    Text("Metascore").foregroundStyle(.secondary)
                 }
             }
         }
     }
 
-    /// Zeichen und Zahl als Gruppe mittig über der Beschriftung, drei gleich breite Spalten.
-    /// `nudge` gleicht optisch aus: Ein schwerer Farbblock links lässt die Gruppe sonst nach links kippen.
-    private func score<Mark: View>(source: String, caption: String, spoken: String, nudge: CGFloat = 0, url: String,
-                                   @ViewBuilder mark: () -> Mark) -> some View {
+    private func score<Mark: View>(source: String, spoken: String, url: String, @ViewBuilder mark: () -> Mark) -> some View {
         Link(destination: URL(string: url)!) {
-            VStack(spacing: 4) {
-                HStack(spacing: 6) { mark() }
-                    .font(.system(size: 19, weight: .semibold))
-                    .monospacedDigit()
-                    .frame(height: 28)
-                    .offset(x: nudge)
-                Text(caption)
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(.secondary)
-            }
-            .frame(width: 124)
+            HStack(spacing: 6) { mark() }
+                .font(.subheadline.weight(.semibold))
+                .monospacedDigit()
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
