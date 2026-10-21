@@ -91,6 +91,11 @@ enum MoodSearch {
                 result.query.summary = "Mit " + named.joined(separator: " und ")
             }
             result.films = rank(result.query, profiles: profiles, people: named)
+            // Hat die Deutung zu streng gefiltert (z. B. „familienfreundlich“), zählt die Person allein.
+            if result.films.isEmpty {
+                let plain = MoodQuery(moods: [], genres: [], exclude: [], maxRuntimeMinutes: 0, familyFriendly: false, similarTo: "", summary: "")
+                result.films = rank(plain, profiles: profiles, people: named)
+            }
         }
         return result
     }
