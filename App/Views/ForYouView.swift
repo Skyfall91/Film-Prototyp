@@ -525,14 +525,13 @@ struct RecommendationCard: View {
 
 // MARK: - Zeitfilter
 
-/// „Wie viel Zeit hast du?“ als natives Menü, wächst wie das Profilmenü aus dem Button.
-/// Höchstens/Mindestens, Schnellwahl und ±15 Minuten für jede beliebige Dauer.
+/// Film oder Serie und „Wie viel Zeit hast du?“ als natives Menü, wächst wie das Profilmenü aus dem Button.
+/// Schnellwahl mit „Egal“, darunter Mindest- und Höchstdauer, je in 15-Minuten-Schritten und einzeln abschaltbar.
 /// Das Menü bleibt beim Einstellen offen, der Stapel dahinter sortiert sich live um.
 struct RuntimeMenu<MenuLabel: View>: View {
     @Environment(AppStore.self) private var store
     @ViewBuilder var label: () -> MenuLabel
 
-    private var current: RuntimeFilter { store.runtimeFilter ?? RuntimeFilter(minutes: 120) }
 
     var body: some View {
         Menu {
@@ -546,36 +545,27 @@ struct RuntimeMenu<MenuLabel: View>: View {
                 .menuActionDismissBehavior(.disabled)
             }
             Section {
-                Picker(store.kindFilter == .series ? "Wie lang darf eine Folge sein?" : "Wie viel Zeit hast du?", selection: Binding(
-                    get: { current.atLeast },
-                    set: { v in set(RuntimeFilter(minutes: current.minutes, atLeast: v)) })) {
-                    Text("Höchstens").tag(false)
-                    Text("Mindestens").tag(true)
-                }
-                .pickerStyle(.palette)
-                .menuActionDismissBehavior(.disabled)
-            }
-            Section {
-                Picker(store.runtimeFilter.map { "\($0.atLeast ? "Mindestens" : "Höchstens") \(RuntimeFilter.duration($0.minutes)) · \(matching) Titel" } ?? "Dauer wählen", selection: Binding(
-                    get: { store.runtimeFilter?.minutes ?? 0 },
-                    set: { v in set(RuntimeFilter(minutes: v, atLeast: current.atLeast)) })) {
+                Picker(timeTitle, selection: Binding(
+                    get: { store.runtimeFilter.map { $0.min == nil ? $0.max ?? -1 : -1 } ?? 0 },
+                    set: { v in
+                        if v == 0 { set(nil) }
+                        else if v > 0 { set(RuntimeFilter(min: store.runtimeFilter?.min.flatMap { $0 < v ? $0 : nil }, max: v)) }
+                    })) {
+                    Text("Egal").tag(0)
                     Text("1,5 Std.").tag(90)
                     Text("2 Std.").tag(120)
-                    Text("2,5 Std.").tag(150)
                     Text("3 Std.").tag(180)
                 }
                 .pickerStyle(.palette)
                 .menuActionDismissBehavior(.disabled)
-                ControlGroup {
-                    Button("15 Min. weniger", systemImage: "minus") { step(-15) }
-                        .menuActionDismissBehavior(.disabled)
-                    Button("15 Min. mehr", systemImage: "plus") { step(15) }
-                        .menuActionDismissBehavior(.disabled)
-                }
+                bound(min: true)
+                bound(min: false)
             }
-            Section {
-                Button("Egal, Zeit spielt keine Rolle", systemImage: "clock.badge.xmark") {
-                    withAnimation(.snappy) { store.runtimeFilter = nil }
+            if store.runtimeFilter != nil || store.kindFilter != .all {
+                Section {
+                    Button("Filter zurücksetzen", systemImage: "arrow.counterclockwise") {
+                        withAnimation(.snappy) { store.runtimeFilter = nil; store.kindFilter = .all }
+                    }
                 }
             }
         } label: {
@@ -586,16 +576,58 @@ struct RuntimeMenu<MenuLabel: View>: View {
         .accessibilityLabel("Film oder Serie, Zeit")
     }
 
+    /// Überschrift der Zeit: die Frage, oder die aktuelle Wahl mit Trefferzahl.
+    private var timeTitle: String {
+        guard let filter = store.runtimeFilter else {
+            return store.kindFilter == .series ? "Wie lang darf eine Folge sein?" : "Wie viel Zeit hast du?"
+        }
+        return "\(filter.label) · \(matching) Titel"
+    }
+
     private var matching: Int {
         RecommendationEngine.candidates(profiles: store.activeProfiles, runtime: store.runtimeFilter,
                                         kind: store.kindFilter, skipped: store.skippedToday).count
     }
 
-    private func step(_ delta: Int) {
-        set(RuntimeFilter(minutes: (current.minutes + delta).clamped(to: 60...240), atLeast: current.atLeast))
+    /// Eine Zeile je Grenze: kürzer, Wert (antippen schaltet die Grenze an oder aus), länger.
+    @ViewBuilder private func bound(min isMin: Bool) -> some View {
+        let value = isMin ? store.runtimeFilter?.min : store.runtimeFilter?.max
+        ControlGroup {
+            Button("Kürzer", systemImage: "minus") { step(isMin, -15) }
+                .menuActionDismissBehavior(.disabled)
+                .accessibilityLabel(isMin ? "Mindestdauer 15 Minuten kürzer" : "Höchstdauer 15 Minuten kürzer")
+            Button(value.map { (isMin ? "ab " : "bis ") + RuntimeFilter.short($0) } ?? (isMin ? "Kein Minimum" : "Kein Maximum"),
+                   systemImage: isMin ? "arrow.up.to.line" : "arrow.down.to.line") {
+                if value == nil { step(isMin, 0) } else { change(isMin, nil) }
+            }
+            .menuActionDismissBehavior(.disabled)
+            Button("Länger", systemImage: "plus") { step(isMin, 15) }
+                .menuActionDismissBehavior(.disabled)
+                .accessibilityLabel(isMin ? "Mindestdauer 15 Minuten länger" : "Höchstdauer 15 Minuten länger")
+        }
     }
 
-    private func set(_ filter: RuntimeFilter) {
+    /// Ohne Grenze startet Mindestens bei 1,5 Std. und Höchstens bei 2 Std.
+    private func step(_ isMin: Bool, _ delta: Int) {
+        let filter = store.runtimeFilter ?? RuntimeFilter()
+        let start = (isMin ? filter.min : filter.max) ?? (isMin ? 90 : 120) - delta
+        change(isMin, (start + delta).clamped(to: 30...240))
+    }
+
+    /// Die andere Grenze rückt mit, damit der Bereich nie leer wird.
+    private func change(_ isMin: Bool, _ value: Int?) {
+        var filter = store.runtimeFilter ?? RuntimeFilter()
+        if isMin {
+            filter.min = value
+            if let value, let hi = filter.max, hi < value { filter.max = value }
+        } else {
+            filter.max = value
+            if let value, let lo = filter.min, lo > value { filter.min = value }
+        }
+        set(filter.min == nil && filter.max == nil ? nil : filter)
+    }
+
+    private func set(_ filter: RuntimeFilter?) {
         withAnimation(.snappy) { store.runtimeFilter = filter }
     }
 }

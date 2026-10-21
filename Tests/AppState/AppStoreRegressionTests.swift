@@ -13,6 +13,13 @@ final class AppStoreRegressionTests: XCTestCase {
         XCTAssertEqual(store.activeProfileIDs,[b.id])
         XCTAssertEqual(store.profiles.map(\.name),["A","B"])
     }
+    func testRuntimeRangeAllowsOnlyFilmsBetweenBounds() {
+        let range = RuntimeFilter(min: 90, max: 120)
+        XCTAssertFalse(range.allows(89)); XCTAssertTrue(range.allows(90)); XCTAssertTrue(range.allows(120)); XCTAssertFalse(range.allows(121))
+        XCTAssertEqual(range.label, "1,5 bis 2 Std.")
+        XCTAssertEqual(RuntimeFilter(minutes: 105, atLeast: true).label, "ab 1:45 Std.")
+        XCTAssertEqual(RuntimeFilter(minutes: 120).label, "bis 2 Std.")
+    }
     @MainActor func testOwnSyncConfirmationKeepsUndoAndDeck() throws {
         let store=AppStore(ephemeral:true)
         let profile=Profile(name:"A",colorIndex:0,avatar:"scifi-0")

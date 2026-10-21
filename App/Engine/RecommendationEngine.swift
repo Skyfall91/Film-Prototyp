@@ -155,18 +155,43 @@ enum KindFilter: String, CaseIterable, Identifiable {
     }
 }
 
+/// Laufzeit als Bereich: mindestens, höchstens oder beides („1,5 bis 2,5 Std.“).
 struct RuntimeFilter: Equatable {
-    var minutes: Int
-    var atLeast = false
+    var min: Int?
+    var max: Int?
 
-    func allows(_ runtime: Int) -> Bool { atLeast ? runtime >= minutes : runtime <= minutes }
+    init(min: Int? = nil, max: Int? = nil) { self.min = min; self.max = max }
+    /// Eine Grenze: höchstens (Standard) oder mindestens.
+    init(minutes: Int, atLeast: Bool = false) { self.init(min: atLeast ? minutes : nil, max: atLeast ? nil : minutes) }
 
-    /// „bis 2 Std.“ / „mind. 1 Std. 45 Min.“
-    var label: String { (atLeast ? "mind. " : "bis ") + Self.duration(minutes) }
+    /// Die Dauer, an der sich Schnellwahlen orientieren: die Obergrenze, sonst die Untergrenze.
+    var minutes: Int { max ?? min ?? 0 }
+
+    func allows(_ runtime: Int) -> Bool {
+        (min.map { runtime >= $0 } ?? true) && (max.map { runtime <= $0 } ?? true)
+    }
+
+    /// „bis 2 Std.“, „ab 1,5 Std.“ oder „1,5 bis 2,5 Std.“
+    var label: String {
+        switch (min, max) {
+        case let (lo?, hi?): "\(Self.short(lo, unit: false)) bis \(Self.short(hi))"
+        case let (lo?, nil): "ab \(Self.short(lo))"
+        case let (nil, hi?): "bis \(Self.short(hi))"
+        case (nil, nil): "Egal"
+        }
+    }
 
     static func duration(_ minutes: Int) -> String {
         let h = minutes / 60, m = minutes % 60
         return h > 0 ? (m > 0 ? "\(h) Std. \(m) Min." : "\(h) Std.") : "\(m) Min."
+    }
+
+    /// Kurz für Menü und Kopfzeile: „2 Std.“, „1,5 Std.“, „1:45 Std.“, „45 Min.“
+    static func short(_ minutes: Int, unit: Bool = true) -> String {
+        let h = minutes / 60, m = minutes % 60
+        if h == 0 { return "\(m) Min." }
+        let value = m == 0 ? "\(h)" : m == 30 ? "\(h),5" : "\(h):\(String(format: "%02d", m))"
+        return unit ? value + " Std." : value
     }
 }
 
