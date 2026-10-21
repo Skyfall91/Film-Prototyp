@@ -243,45 +243,52 @@ struct FilmDetailView: View {
         HStack(alignment: .top, spacing: 0) {
             if let imdb = film.imdbRating {
                 let value = imdb.formatted(.number.precision(.fractionLength(1)))
-                score(value, source: "IMDb", spoken: value, url: "https://www.imdb.com/title/\(film.imdbID)/") {
+                score(source: "IMDb", caption: "Zuschauer", spoken: value, nudge: 3, url: "https://www.imdb.com/title/\(film.imdbID)/") {
                     Text("IMDb")
-                        .font(.system(size: 10, weight: .black)).foregroundStyle(.black)
-                        .padding(.horizontal, 4).padding(.vertical, 1.5)
-                        .background(Color(red: 0.96, green: 0.77, blue: 0.09), in: .rect(cornerRadius: 3))
+                        .font(.system(size: 13, weight: .black)).foregroundStyle(.black)
+                        .padding(.horizontal, 6)
+                        .frame(height: 24)
+                        .background(Color(red: 0.96, green: 0.77, blue: 0.09), in: .rect(cornerRadius: 5))
+                    Text(value)
                 }
             }
             if let rt = film.rottenTomatoes {
-                score("\(rt) %", source: "Rotten Tomatoes", spoken: "\(rt) Prozent",
+                score(source: "Rotten Tomatoes", caption: "Kritiker", spoken: "\(rt) Prozent", nudge: 2,
                       url: "https://www.rottentomatoes.com/search?search=\(query)") {
-                    Text(rt >= 60 ? "🍅" : "🤢").font(.system(size: 11))
-                    Text("Tomatometer")
+                    // Emojis haben seitlich Luft: optisch auf denselben Abstand wie die Schilder ziehen.
+                    Text(rt >= 60 ? "🍅" : "🤢").font(.system(size: 20)).padding(.horizontal, -2)
+                    Text("\(rt) %")
                 }
             }
             if let mc = film.metascore {
-                score("\(mc)", source: "Metacritic", spoken: "\(mc)", url: "https://www.metacritic.com/search/\(query)/") {
-                    RoundedRectangle(cornerRadius: 2.5)
-                        .fill(mc >= 61 ? Color(red: 0.4, green: 0.8, blue: 0.2) : mc >= 40 ? Color(red: 0.95, green: 0.75, blue: 0.1) : .red)
-                        .frame(width: 10, height: 10)
-                    Text("Metascore")
+                score(source: "Metacritic", caption: "Metascore", spoken: "\(mc)", url: "https://www.metacritic.com/search/\(query)/") {
+                    Text("\(mc)")
+                        .font(.system(size: 15, weight: .heavy)).foregroundStyle(.white)
+                        .monospacedDigit()
+                        .frame(width: 34, height: 24)
+                        .background(mc >= 61 ? Color(red: 0.4, green: 0.8, blue: 0.2) : mc >= 40 ? Color(red: 0.95, green: 0.75, blue: 0.1) : .red,
+                                    in: .rect(cornerRadius: 5))
                 }
             }
         }
     }
 
-    /// Oben groß die Zahl, darunter klein die Quelle mit ihrem Zeichen. Alles mittig.
-    private func score<Mark: View>(_ value: String, source: String, spoken: String, url: String,
+    /// Zeichen und Zahl als Gruppe mittig über der Beschriftung, drei gleich breite Spalten.
+    /// `nudge` gleicht optisch aus: Ein schwerer Farbblock links lässt die Gruppe sonst nach links kippen.
+    private func score<Mark: View>(source: String, caption: String, spoken: String, nudge: CGFloat = 0, url: String,
                                    @ViewBuilder mark: () -> Mark) -> some View {
         Link(destination: URL(string: url)!) {
-            VStack(spacing: 5) {
-                Text(value)
-                    .font(.system(size: 22, weight: .semibold, design: .serif))
+            VStack(spacing: 4) {
+                HStack(spacing: 6) { mark() }
+                    .font(.system(size: 19, weight: .semibold))
                     .monospacedDigit()
-                HStack(spacing: 4) { mark() }
+                    .frame(height: 28)
+                    .offset(x: nudge)
+                Text(caption)
                     .font(.caption2.weight(.medium))
                     .foregroundStyle(.secondary)
-                    .frame(height: 14)
             }
-            .frame(width: 116)
+            .frame(width: 124)
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
