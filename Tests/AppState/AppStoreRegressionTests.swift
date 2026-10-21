@@ -13,7 +13,7 @@ final class AppStoreRegressionTests: XCTestCase {
         XCTAssertEqual(store.activeProfileIDs,[b.id])
         XCTAssertEqual(store.profiles.map(\.name),["A","B"])
     }
-    func testRuntimeRangeAllowsOnlyFilmsBetweenBounds() {
+    @MainActor func testRuntimeRangeAllowsOnlyFilmsBetweenBounds() {
         let range = RuntimeFilter(min: 90, max: 120)
         XCTAssertFalse(range.allows(89)); XCTAssertTrue(range.allows(90)); XCTAssertTrue(range.allows(120)); XCTAssertFalse(range.allows(121))
         XCTAssertEqual(range.label, "1,5 bis 2 Std.")

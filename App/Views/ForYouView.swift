@@ -526,7 +526,7 @@ struct RecommendationCard: View {
 // MARK: - Zeitfilter
 
 /// Film oder Serie und „Wie viel Zeit hast du?“ als natives Menü, wächst wie das Profilmenü aus dem Button.
-/// Schnellwahl mit „Egal“, darunter Mindest- und Höchstdauer, je in 15-Minuten-Schritten und einzeln abschaltbar.
+/// Darunter Mindest- und Höchstdauer, je „Egal“ oder eine von drei Dauern.
 /// Das Menü bleibt beim Einstellen offen, der Stapel dahinter sortiert sich live um.
 struct RuntimeMenu<MenuLabel: View>: View {
     @Environment(AppStore.self) private var store
@@ -544,22 +544,9 @@ struct RuntimeMenu<MenuLabel: View>: View {
                 .pickerStyle(.palette)
                 .menuActionDismissBehavior(.disabled)
             }
-            Section {
-                Picker(timeTitle, selection: Binding(
-                    get: { store.runtimeFilter.map { $0.min == nil ? $0.max ?? -1 : -1 } ?? 0 },
-                    set: { v in
-                        if v == 0 { set(nil) }
-                        else if v > 0 { set(RuntimeFilter(min: store.runtimeFilter?.min.flatMap { $0 < v ? $0 : nil }, max: v)) }
-                    })) {
-                    Text("Egal").tag(0)
-                    Text("1,5 Std.").tag(90)
-                    Text("2 Std.").tag(120)
-                    Text("3 Std.").tag(180)
-                }
-                .pickerStyle(.palette)
-                .menuActionDismissBehavior(.disabled)
-                bound(min: true)
-                bound(min: false)
+            Section(timeTitle) {
+                bound("Mindestens", options: [60, 90, 120], value: store.runtimeFilter?.min, isMin: true)
+                bound("Höchstens", options: [90, 120, 180], value: store.runtimeFilter?.max, isMin: false)
             }
             if store.runtimeFilter != nil || store.kindFilter != .all {
                 Section {
@@ -589,29 +576,14 @@ struct RuntimeMenu<MenuLabel: View>: View {
                                         kind: store.kindFilter, skipped: store.skippedToday).count
     }
 
-    /// Eine Zeile je Grenze: kürzer, Wert (antippen schaltet die Grenze an oder aus), länger.
-    @ViewBuilder private func bound(min isMin: Bool) -> some View {
-        let value = isMin ? store.runtimeFilter?.min : store.runtimeFilter?.max
-        ControlGroup {
-            Button("Kürzer", systemImage: "minus") { step(isMin, -15) }
-                .menuActionDismissBehavior(.disabled)
-                .accessibilityLabel(isMin ? "Mindestdauer 15 Minuten kürzer" : "Höchstdauer 15 Minuten kürzer")
-            Button(value.map { (isMin ? "ab " : "bis ") + RuntimeFilter.short($0) } ?? (isMin ? "Kein Minimum" : "Kein Maximum"),
-                   systemImage: isMin ? "arrow.up.to.line" : "arrow.down.to.line") {
-                if value == nil { step(isMin, 0) } else { change(isMin, nil) }
-            }
-            .menuActionDismissBehavior(.disabled)
-            Button("Länger", systemImage: "plus") { step(isMin, 15) }
-                .menuActionDismissBehavior(.disabled)
-                .accessibilityLabel(isMin ? "Mindestdauer 15 Minuten länger" : "Höchstdauer 15 Minuten länger")
+    /// Eine Zeile je Grenze: Egal oder eine von drei Dauern.
+    private func bound(_ title: String, options: [Int], value: Int?, isMin: Bool) -> some View {
+        Picker(title, selection: Binding(get: { value ?? 0 }, set: { change(isMin, $0 == 0 ? nil : $0) })) {
+            Text("Egal").tag(0)
+            ForEach(options, id: \.self) { Text(RuntimeFilter.short($0)).tag($0) }
         }
-    }
-
-    /// Ohne Grenze startet Mindestens bei 1,5 Std. und Höchstens bei 2 Std.
-    private func step(_ isMin: Bool, _ delta: Int) {
-        let filter = store.runtimeFilter ?? RuntimeFilter()
-        let start = (isMin ? filter.min : filter.max) ?? (isMin ? 90 : 120) - delta
-        change(isMin, (start + delta).clamped(to: 30...240))
+        .pickerStyle(.palette)
+        .menuActionDismissBehavior(.disabled)
     }
 
     /// Die andere Grenze rückt mit, damit der Bereich nie leer wird.
