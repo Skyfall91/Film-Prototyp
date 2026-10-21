@@ -20,6 +20,14 @@ final class AppStoreRegressionTests: XCTestCase {
         XCTAssertEqual(RuntimeFilter(minutes: 105, atLeast: true).label, "ab 1:45 Std.")
         XCTAssertEqual(RuntimeFilter(minutes: 120).label, "bis 2 Std.")
     }
+    @MainActor func testSearchForActorShowsOnlyTheirFilms() async {
+        for text in ["Leonardo DiCaprio", "dicaprio", "lustige Filme mit DiCaprio"] {
+            let result = await MoodSearch.search(text, profiles: [])
+            XCTAssertFalse(result.films.isEmpty, text)
+            XCTAssertTrue(result.films.allSatisfy { $0.film.cast.contains("Leonardo DiCaprio") }, text)
+        }
+        XCTAssertEqual(MoodSearch.people(in: "etwas Lustiges"), [])
+    }
     @MainActor func testOwnSyncConfirmationKeepsUndoAndDeck() throws {
         let store=AppStore(ephemeral:true)
         let profile=Profile(name:"A",colorIndex:0,avatar:"scifi-0")

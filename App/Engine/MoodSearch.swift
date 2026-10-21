@@ -82,6 +82,24 @@ enum MoodSearch {
     }
 
     static func search(_ text: String, profiles: [Profile]) async -> MoodResult {
+        // Steht eine Person im Text, zählen nur ihre Filme. Der Rest („lustig“) sortiert innerhalb davon.
+        let named = people(in: text)
+        let rest = named.isEmpty ? text : removing(named, from: text)
+        var result = await interpret(rest, profiles: profiles)
+        if !named.isEmpty {
+            if result.query.summary.isEmpty || !rest.contains(where: \.isLetter) {
+                result.query.summary = "Mit " + named.joined(separator: " und ")
+            }
+            result.films = rank(result.query, profiles: profiles, people: named)
+        }
+        return result
+    }
+
+    private static func interpret(_ text: String, profiles: [Profile]) async -> MoodResult {
+        guard text.contains(where: \.isLetter) else {
+            let empty = MoodQuery(moods: [], genres: [], exclude: [], maxRuntimeMinutes: 0, familyFriendly: false, similarTo: "", summary: "")
+            return MoodResult(query: empty, films: [], usedAppleIntelligence: false)
+        }
         #if os(tvOS)
         let query = keywordQuery(text)
         return MoodResult(query: query, films: rank(query, profiles: profiles), usedAppleIntelligence: false)
@@ -106,9 +124,44 @@ enum MoodSearch {
         #endif
     }
 
+    // MARK: - Personen aus Besetzung und Regie
+
+    private static let allPeople: [String] = Array(Set(FilmIndex.all.flatMap { $0.cast + ($0.director.isEmpty ? [] : [$0.director]) }))
+
+    private static func normalized(_ s: String) -> String {
+        s.lowercased().folding(options: .diacriticInsensitive, locale: Locale(identifier: "de_DE"))
+    }
+
+    private static func lastName(_ name: String) -> String? {
+        name.split(separator: " ").last.map { normalized(String($0)) }.flatMap { $0.count >= 4 ? $0 : nil }
+    }
+
+    /// Namen im Suchtext: der ganze Name oder ein Nachname mit mindestens vier Buchstaben („dicaprio“).
+    static func people(in text: String) -> [String] {
+        let t = normalized(text)
+        let full = allPeople.filter { t.contains(normalized($0)) }
+        if !full.isEmpty { return full.sorted() }
+        let words = Set(t.split { !$0.isLetter && $0 != "-" && $0 != "'" }.map(String.init))
+        return allPeople.filter { lastName($0).map(words.contains) ?? false }.sorted()
+    }
+
+    private static func removing(_ names: [String], from text: String) -> String {
+        var rest = normalized(text)
+        for name in names {
+            rest = rest.replacingOccurrences(of: normalized(name), with: " ")
+            if let last = lastName(name) { rest = rest.replacingOccurrences(of: last, with: " ") }
+        }
+        for filler in ["filme mit", "film mit", "serien mit", "mit", "von", "und"] {
+            rest = rest.replacingOccurrences(of: "\\b\(filler)\\b", with: " ", options: .regularExpression)
+        }
+        return rest.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     // MARK: - Ranking im eigenen Index
 
-    static func rank(_ q: MoodQuery, profiles: [Profile]) -> [Recommendation] {
+    /// `people`: nur Filme, in denen eine dieser Personen spielt oder Regie führt.
+    static func rank(_ q: MoodQuery, profiles: [Profile], people: [String] = []) -> [Recommendation] {
+        let wanted = Set(people)
         let moods = Set(q.moods.map { $0.lowercased() })
         let genres = Set(q.genres)
         let exclude = Set(q.exclude.map { $0.lowercased() })
@@ -119,6 +172,7 @@ enum MoodSearch {
 
         let scored: [(Film, Double)] = FilmIndex.all.compactMap { film in
             guard film.fsk <= fsk, profiles.allSatisfy({ $0.allows(film) }), film.id != reference?.id else { return nil }
+            if !wanted.isEmpty, !film.cast.contains(where: wanted.contains), !wanted.contains(film.director) { return nil }
             if q.maxRuntimeMinutes > 0, film.runtime > q.maxRuntimeMinutes { return nil }
             let tags = Set(film.moods) .union(film.genres.map { $0.lowercased() })
             if !tags.isDisjoint(with: exclude) { return nil }
@@ -128,7 +182,7 @@ enum MoodSearch {
                 s += Double(Set(film.features.map(\.key)).intersection(reference.features.map(\.key)).count) * 0.9
             }
             if q.familyFriendly, film.moods.contains("familienfreundlich") { s += 2 }
-            guard s > 0 || (moods.isEmpty && genres.isEmpty && reference == nil) else { return nil }
+            guard s > 0 || !wanted.isEmpty || (moods.isEmpty && genres.isEmpty && reference == nil) else { return nil }
             // Persönlicher Geschmack als Feinsortierung
             s += profiles.isEmpty ? 0 : RecommendationEngine.groupScore(film, profiles: profiles) * 0.35
             if film.comingSoon { s -= 1.5 }
@@ -137,7 +191,8 @@ enum MoodSearch {
         return scored.sorted { $0.1 > $1.1 }.prefix(12).map { film, _ in
             let personal = profiles.isEmpty ? 70 : RecommendationEngine.matchPercent(RecommendationEngine.groupScore(film, profiles: profiles))
             let hit = film.moods.filter(moods.contains).prefix(2).map(\.moodLabel)
-            let reason = reference.map { "Ähnlich wie „\($0.title)“" }
+            let person = (film.cast + [film.director]).first(where: wanted.contains)
+            let reason = person.map { $0 == film.director ? "Regie: \($0)" : "Mit \($0)" } ?? reference.map { "Ähnlich wie „\($0.title)“" }
                 ?? (hit.isEmpty ? film.genres.prefix(2).joined(separator: " · ") : hit.joined(separator: " · "))
             return Recommendation(film: film, match: personal, reason: reason)
         }
