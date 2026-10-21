@@ -107,16 +107,9 @@ struct ProfileEditor: View {
             }
             .scrollDismissesKeyboard(.interactively)
         }
-        .overlay(alignment: .topLeading) {
+        .toolbar {
             if let cancel {
-                Button(action: cancel) {
-                    Image(systemName: "xmark").font(.headline).frame(width: 30, height: 30)
-                }
-                .buttonStyle(.glass)
-                .buttonBorderShape(.circle)
-                .foregroundStyle(.white)
-                .accessibilityLabel("Abbrechen")
-                .padding(.leading, 20).padding(.top, 8)
+                ToolbarItem(placement: .cancellationAction) { Button(role: .close, action: cancel).tint(.white) }
             }
         }
         .safeAreaInset(edge: .bottom) {
@@ -306,10 +299,12 @@ struct ManageProfilesView: View {
         .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Fertig") { dismiss() } } }
         .fullScreenCover(item: Binding(get: { editing.map(IdentifiedUUID.init) }, set: { editing = $0?.id })) { item in
             if let profile = store.profiles.first(where: { $0.id == item.id }) {
+                NavigationFrame {
                 ProfileEditor(isFirst: false, editing: profile, cancel: { editing = nil },
                               delete: store.canDeleteProfile ? { store.deleteProfile(profile.id); editing = nil } : nil) { name, art, fsk, little in
                     store.editProfile(profile.id, name: name, avatar: art, maxFSK: fsk, littleKid: little)
                     editing = nil
+                }
                 }
                 .preferredColorScheme(.dark)
             }
@@ -468,7 +463,7 @@ struct WhoIsWatchingView: View {
         } message: { _ in
             Text("Alles bleibt gespeichert: Geschmack, Merkliste, Bewertungen.")
         }
-        .sheet(isPresented: $changingPlan) { PlanPicker(mode: .upgrade) { _ in changingPlan = false } }
+        .sheet(isPresented: $changingPlan) { NavigationFrame { PlanPicker(mode: .upgrade) { _ in changingPlan = false } } }
     }
 
     private var pausedTitle: String {

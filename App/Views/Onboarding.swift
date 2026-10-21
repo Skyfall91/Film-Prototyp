@@ -29,6 +29,10 @@ struct OnboardingFlow: View {
     }
 
     var body: some View {
+        NavigationFrame { content }
+    }
+
+    private var content: some View {
         ZStack {
             Color.black.ignoresSafeArea()
             switch step {
@@ -65,30 +69,16 @@ struct OnboardingFlow: View {
                 if let profileID { PlanPicker(mode: .onboarding) { _ in onFinish(profileID) } }
             }
         }
-        .safeAreaInset(edge: .top, spacing: 0) {
-            // Zurück führt zum Profil (Name, Bild), das Profil und alle Swipes bleiben erhalten.
-            // Abbrechen gibt es nur beim Anlegen weiterer Profile, erst dann wird das Profil verworfen.
+        // Zurück führt zum Profil (Name, Bild), das Profil und alle Swipes bleiben erhalten.
+        // Abbrechen gibt es nur beim Anlegen weiterer Profile, erst dann wird das Profil verworfen.
+        .toolbar {
             if [.calibrate, .favorites].contains(step) {
-                HStack {
-                    Button { go(.name) } label: {
-                        Image(systemName: "chevron.left").font(.headline).frame(width: 30, height: 30)
-                    }
-                    .buttonStyle(.glass)
-                    .buttonBorderShape(.circle)
-                    .foregroundStyle(.white)
-                    .accessibilityLabel("Zurück zum Profil")
-                    Spacer()
-                    if cancel != nil {
-                        Button { confirmCancel = true } label: {
-                            Image(systemName: "xmark").font(.headline).frame(width: 30, height: 30)
-                        }
-                        .buttonStyle(.glass)
-                        .buttonBorderShape(.circle)
-                        .foregroundStyle(.white)
-                        .accessibilityLabel("Profil nicht anlegen")
-                    }
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Zurück zum Profil", systemImage: "chevron.left") { go(.name) }.tint(.white)
                 }
-                .padding(.horizontal, 20).padding(.top, 4)
+                if cancel != nil {
+                    ToolbarItem(placement: .topBarTrailing) { Button(role: .close) { confirmCancel = true }.tint(.white) }
+                }
             }
         }
         .confirmationDialog("Profil nicht anlegen?", isPresented: $confirmCancel, titleVisibility: .visible) {

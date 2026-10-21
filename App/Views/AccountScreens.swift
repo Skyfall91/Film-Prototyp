@@ -13,6 +13,10 @@ struct AuthFlow: View {
     init(start: Step = .welcome) { _step = State(initialValue: start) }
 
     var body: some View {
+        NavigationFrame { content }
+    }
+
+    private var content: some View {
         ZStack {
             Color.black.ignoresSafeArea()
             PosterWall().opacity(step == .welcome ? 1 : 0.35)
@@ -71,24 +75,19 @@ private struct AuthCard<Fields: View>: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
-                Button(action: back) {
-                    Image(systemName: "chevron.left").font(.headline).frame(width: 30, height: 30)
-                }
-                .buttonStyle(.glass)
-                .buttonBorderShape(.circle)
-                .foregroundStyle(.white)
-                .accessibilityLabel("Zurück")
-                .padding(.top, 8)
                 VStack(alignment: .leading, spacing: 6) {
                     Text(title).font(.largeTitle.weight(.heavy))
                     Text(subtitle).foregroundStyle(.secondary)
                 }
-                .padding(.top, 60)
+                .padding(.top, 20)
                 fields()
             }
             .padding(24)
         }
         .scrollDismissesKeyboard(.interactively)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) { Button("Zurück", systemImage: "chevron.left", action: back).tint(.white) }
+        }
     }
 }
 
@@ -338,20 +337,16 @@ struct PlanPicker: View {
     private var isFirstPurchase: Bool { current == nil }
 
     var body: some View {
+        plans.toolbar {
+            if mode != .onboarding {
+                ToolbarItem(placement: .topBarTrailing) { Button(role: .close) { onDone(false) }.tint(.white) }
+            }
+        }
+    }
+
+    private var plans: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                HStack {
-                    Spacer()
-                    if mode != .onboarding {
-                        Button { onDone(false) } label: {
-                            Image(systemName: "xmark").font(.headline).frame(width: 30, height: 30)
-                        }
-                        .buttonStyle(.glass)
-                        .buttonBorderShape(.circle)
-                        .foregroundStyle(.white)
-                        .accessibilityLabel("Schließen")
-                    }
-                }
                 VStack(alignment: .leading, spacing: 8) {
                     Text(title).font(.largeTitle.weight(.heavy))
                     Text(subtitle).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -839,7 +834,7 @@ struct AccountView: View {
         .navigationTitle("Einstellungen")
         .navigationBarTitleDisplayMode(.inline)
         .fullScreenCover(isPresented: $changing) {
-            PlanPicker(mode: store.subscription == nil ? .unlock : .change) { _ in changing = false }
+            NavigationFrame { PlanPicker(mode: store.subscription == nil ? .unlock : .change) { _ in changing = false } }
         }
         .manageSubscriptionsSheet(isPresented: $manageSheet)
         .onChange(of: manageSheet) { _, open in if !open { Task { await store.syncSubscription() } } }

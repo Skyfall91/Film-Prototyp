@@ -90,18 +90,17 @@ struct FilmDetailView: View {
         // Beim Schließen schnell weg, damit Match und Einzeiler der Karte schon während des Flugs da sind.
         .animation(contentVisible ? .easeOut(duration: 0.35) : .easeOut(duration: 0.18), value: contentVisible)
         .simultaneousGesture(edgeSwipe, isEnabled: onClose != nil && !closing)
+        // Apples Schließen-Button, ohne Navigationsleiste: Die würde die Flug-Ebene verschieben.
         .overlay(alignment: .topTrailing) {
             if let onClose {
-                Button { closing = true; onClose() } label: {
-                    Image(systemName: "xmark").font(.body.weight(.semibold))
-                        .frame(width: 30, height: 30)
-                }
-                .buttonStyle(.glass)
-                .buttonBorderShape(.circle)
-                .foregroundStyle(.white)
-                .padding(.trailing, 16).padding(.top, 4)
-                .opacity(contentVisible ? 1 : 0)
-                .accessibilityLabel("Schließen")
+                Button(role: .close) { closing = true; onClose() }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .controlSize(.large)
+                    .tint(.white)
+                    .padding(.trailing, 16).padding(.top, 4)
+                    .opacity(contentVisible ? 1 : 0)
             }
         }
         .filmPlayer($playing, in: playerNS)

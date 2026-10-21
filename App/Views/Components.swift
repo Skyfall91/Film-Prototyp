@@ -329,3 +329,18 @@ struct WrapLayout: Layout {
         return rows
     }
 }
+
+/// Rahmen für Vollbild-Seiten: Schließen und Zurück sind Apples eigene Buttons in der Leiste.
+/// Leiste und Hintergrund bleiben durchsichtig, die Seite behält ihren eigenen Hintergrund.
+struct NavigationFrame<Content: View>: View {
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        NavigationStack {
+            content()
+                .toolbarBackground(.hidden, for: .navigationBar)
+                .navigationBarTitleDisplayMode(.inline)
+                .containerBackground(.clear, for: .navigation)
+        }
+    }
+}

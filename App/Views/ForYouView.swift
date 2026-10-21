@@ -783,8 +783,10 @@ struct HeroOverlay: View {
                                contentVisible: hero.open,
                                onClose: hero.close, onPosterFrame: { hero.detailFrame = $0 })
             }
-            // Ganzer Bildschirm ohne Ränder: Hier entsprechen die Koordinaten denen der Messung.
-            GeometryReader { _ in
+            // Ganzer Bildschirm ohne Ränder. Gemessen wird global, darum vom eigenen Ursprung aus rechnen:
+            // Liegt die Ebene nicht genau bei 0,0, springt das Cover sonst beim Losfliegen.
+            GeometryReader { geo in
+                let origin = geo.frame(in: .global).origin
                 if let film = hero.ghost, let source {
                     let r = hero.open ? hero.detailFrame : source.frame
                     // Schatten wie am jeweiligen Ort: Karte groß und weich, Detail-Cover etwas enger,
@@ -794,7 +796,7 @@ struct HeroOverlay: View {
                         .frame(width: r.width, height: r.height)
                         .shadow(color: .black.opacity(hero.open || source.card ? 0.5 : 0),
                                 radius: hero.open ? 18 : 24, y: hero.open ? 10 : 12)
-                        .position(x: r.midX, y: r.midY)
+                        .position(x: r.midX - origin.x, y: r.midY - origin.y)
                     if let rec = source.rec {
                         // Die ganze Karte fliegt: in Kartengröße gezeichnet und auf die aktuelle Größe skaliert,
                         // so sitzen Verlauf und Text genau wie auf der Karte. Die Ecken enden bei 14 pt am Ziel.
@@ -806,14 +808,14 @@ struct HeroOverlay: View {
                                            cornerRadius: hero.open ? 14 / detailScale : source.radius)
                             .frame(width: s.width, height: s.height)
                             .scaleEffect(scale)
-                            .position(x: r.midX, y: r.midY)
+                            .position(x: r.midX - origin.x, y: r.midY - origin.y)
                     } else {
                         PosterView(film: film, cornerRadius: 0, showsBadge: false)
                             .frame(width: r.width, height: r.height)
                             .clipShape(.rect(cornerRadius: hero.open ? 14 : source.radius))
                             .overlay(RoundedRectangle(cornerRadius: hero.open ? 14 : source.radius)
                                 .strokeBorder(.white.opacity(hero.open ? 0.12 : 0), lineWidth: 0.5))
-                            .position(x: r.midX, y: r.midY)
+                            .position(x: r.midX - origin.x, y: r.midY - origin.y)
                     }
                 }
             }

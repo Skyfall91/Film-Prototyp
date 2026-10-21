@@ -23,7 +23,7 @@ private struct PlayerGate: View {
 
     var body: some View {
         if request.countsAsWatched && !store.canPlay {
-            PlanPicker(mode: .unlock) { _ in dismiss() }
+            NavigationFrame { PlanPicker(mode: .unlock) { _ in dismiss() } }
         } else {
             PlayerScreen(request: request)
         }

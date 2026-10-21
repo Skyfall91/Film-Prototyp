@@ -216,7 +216,7 @@ struct PhoneCompanionView: View {
             if let draft = tasteDraft, let id = tasteBaseline?.id { TasteChatView(profileID: id).environment(draft) }
         }
         .sheet(isPresented: $plans) {
-            PlanPicker(mode: .change) { changed in subscriptionChanged = changed; plans = false }.environment(store)
+            NavigationFrame { PlanPicker(mode: .change) { changed in subscriptionChanged = changed; plans = false } }.environment(store)
         }
         .confirmationDialog("Den Zugang dieses Apple TV entfernen? Die Daten deines Kontos bleiben erhalten. Der Fernseher muss danach neu verbunden werden.", isPresented: Binding(get: { deviceToRevoke != nil }, set: { if !$0 { deviceToRevoke = nil } }), titleVisibility: .visible) {
             if let device = deviceToRevoke {
