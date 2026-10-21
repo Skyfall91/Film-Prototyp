@@ -705,6 +705,19 @@ final class AppStore {
         tasteRevision += 1
         guard !suppressPersistence else { return }
         deviceSync?.captureLocalChanges()
+        schedulePersist(signedInNow: signedInNow)
+    }
+
+    /// Wer gerade schaut: nur auf diesem Gerät, darum ohne Sync und ohne neuen Geschmacksstand.
+    /// Die heutigen „Heute nicht“ dieser Runde kommen mit.
+    func setViewers(_ ids: [UUID]) {
+        activeProfileIDs = profiles.map(\.id).filter(ids.contains)
+        restoreSkipped()
+        guard !suppressPersistence else { return }
+        schedulePersist()
+    }
+
+    private func schedulePersist(signedInNow: Bool = false) {
         persistTask?.cancel()
         if signedInNow { persist(signedInNow: true); return }
         persistTask = Task { [weak self] in

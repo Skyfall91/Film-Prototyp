@@ -183,19 +183,16 @@ struct ProfileMenu<MenuLabel: View>: View {
         Binding(
             get: { store.activeProfileIDs.contains(profile.id) },
             set: { on in
-                withAnimation(.smooth) {
-                    if on && store.subscription?.plan.allowsTogether == false {
-                        store.activeProfileIDs = [profile.id]
-                    } else if on {
-                        store.activeProfileIDs.append(profile.id)
-                    } else if store.activeProfileIDs.count > 1 {
-                        store.activeProfileIDs.removeAll { $0 == profile.id }
-                    }
-                    // Reihenfolge wie in der Profilliste, neue Runde = neue Vorschläge.
-                    store.activeProfileIDs = store.profiles.map(\.id).filter(store.activeProfileIDs.contains)
-                    store.skippedToday = []
-                    store.save()
+                var ids = store.activeProfileIDs
+                if on && store.subscription?.plan.allowsTogether == false {
+                    ids = [profile.id]
+                } else if on {
+                    ids.append(profile.id)
+                } else if ids.count > 1 {
+                    ids.removeAll { $0 == profile.id }
                 }
+                // Einmal setzen: Jede Zwischenstufe würde den Stapel dahinter neu aufbauen.
+                withAnimation(.smooth) { store.setViewers(ids) }
             })
     }
 }

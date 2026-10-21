@@ -24,6 +24,7 @@ struct ForYouView: View {
     @State private var stale = false
     /// Die Änderung kam von hier (Swipe, Rückgängig): Die oberste Karte bleibt liegen.
     @State private var ownChange = false
+    @State private var viewerRebuild: Task<Void, Never>?
     /// Gewischt, aber noch nicht gelernt (läuft, sobald die Karte weggeflogen ist).
     @State private var pendingWork: [(id: UUID, work: () -> Void)] = []
 
@@ -54,14 +55,12 @@ struct ForYouView: View {
                 } else if expanded, let rec = recs.first {
                     HStack(spacing: 36) {
                         deck(recs, topAligned: true)
-                            .id(store.activeProfileIDs)
                             .frame(maxWidth: geometry.size.width * 0.46)
                         tabletInformation(rec)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
                 } else {
                     deck(recs)
-                        .id(store.activeProfileIDs)
                         .transition(.asymmetric(insertion: .scale(scale: 0.92).combined(with: .opacity), removal: .opacity))
                     if store.homeSwipeCount < 3 {
                         SwipeLegend(options: options)
@@ -105,7 +104,15 @@ struct ForYouView: View {
         }
         .onDisappear { visible = false }
         .onChange(of: store.tasteRevision) { _, _ in tasteChanged() }
-        .onChange(of: store.activeProfileIDs) { _, _ in rebuildQueue(animated: true) }
+        // Mehrere Profile hintereinander antippen: erst neu sortieren, wenn die Auswahl kurz steht.
+        .onChange(of: store.activeProfileIDs) { _, _ in
+            viewerRebuild?.cancel()
+            viewerRebuild = Task {
+                try? await Task.sleep(for: .milliseconds(250))
+                guard !Task.isCancelled else { return }
+                rebuildQueue(animated: true)
+            }
+        }
         .onChange(of: store.runtimeFilter) { _, _ in rebuildQueue(animated: true) }
         .onChange(of: store.kindFilter) { _, _ in rebuildQueue(animated: true) }
         .onChange(of: store.pendingRatings.count) { _, _ in prune() }
