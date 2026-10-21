@@ -71,18 +71,20 @@ struct OnboardingFlow: View {
             if [.calibrate, .favorites].contains(step) {
                 HStack {
                     Button { go(.name) } label: {
-                        Image(systemName: "chevron.left").font(.headline).frame(width: 44, height: 44)
+                        Image(systemName: "chevron.left").font(.headline).frame(width: 30, height: 30)
                     }
-                    .buttonStyle(.plain)
-                    .glassEffect(.regular.interactive(), in: .circle)
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .foregroundStyle(.white)
                     .accessibilityLabel("Zurück zum Profil")
                     Spacer()
                     if cancel != nil {
                         Button { confirmCancel = true } label: {
-                            Image(systemName: "xmark").font(.headline).frame(width: 44, height: 44)
+                            Image(systemName: "xmark").font(.headline).frame(width: 30, height: 30)
                         }
-                        .buttonStyle(.plain)
-                        .glassEffect(.regular.interactive(), in: .circle)
+                        .buttonStyle(.glass)
+                        .buttonBorderShape(.circle)
+                        .foregroundStyle(.white)
                         .accessibilityLabel("Profil nicht anlegen")
                     }
                 }
@@ -310,10 +312,11 @@ struct CalibrationStep: View {
         return VStack(spacing: 6) {
             Button { trigger = d } label: {
                 Image(systemName: o.symbol).font(.title3.weight(.bold)).foregroundStyle(o.color)
-                    .frame(width: 56, height: 56)
+                    .frame(width: 42, height: 42)
             }
-            .buttonStyle(.plain)
-            .glassEffect(.regular.interactive(), in: .circle)
+            .buttonStyle(.glass)
+            .buttonBorderShape(.circle)
+            .foregroundStyle(.white)
             .accessibilityLabel(o.title)
             Text(o.title).font(.caption2).foregroundStyle(.secondary).lineLimit(1).fixedSize()
         }

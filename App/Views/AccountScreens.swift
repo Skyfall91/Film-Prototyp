@@ -72,10 +72,11 @@ private struct AuthCard<Fields: View>: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 Button(action: back) {
-                    Image(systemName: "chevron.left").font(.headline).frame(width: 44, height: 44)
+                    Image(systemName: "chevron.left").font(.headline).frame(width: 30, height: 30)
                 }
-                .buttonStyle(.plain)
-                .glassEffect(.regular.interactive(), in: .circle)
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+                .foregroundStyle(.white)
                 .accessibilityLabel("Zurück")
                 .padding(.top, 8)
                 VStack(alignment: .leading, spacing: 6) {
@@ -343,10 +344,11 @@ struct PlanPicker: View {
                     Spacer()
                     if mode != .onboarding {
                         Button { onDone(false) } label: {
-                            Image(systemName: "xmark").font(.headline).frame(width: 44, height: 44)
+                            Image(systemName: "xmark").font(.headline).frame(width: 30, height: 30)
                         }
-                        .buttonStyle(.plain)
-                        .glassEffect(.regular.interactive(), in: .circle)
+                        .buttonStyle(.glass)
+                        .buttonBorderShape(.circle)
+                        .foregroundStyle(.white)
                         .accessibilityLabel("Schließen")
                     }
                 }
@@ -647,10 +649,11 @@ private struct DemoCheckout: View {
                 }
                 Spacer()
                 Button { dismiss() } label: {
-                    Image(systemName: "xmark").font(.subheadline.weight(.bold)).frame(width: 34, height: 34)
+                    Image(systemName: "xmark").font(.subheadline.weight(.bold)).frame(width: 20, height: 20)
                 }
-                .buttonStyle(.plain)
-                .glassEffect(.regular.interactive(), in: .circle)
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+                .foregroundStyle(.white)
                 .disabled(phase > 0)
                 .accessibilityLabel("Abbrechen")
             }

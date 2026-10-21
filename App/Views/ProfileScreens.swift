@@ -110,10 +110,11 @@ struct ProfileEditor: View {
         .overlay(alignment: .topLeading) {
             if let cancel {
                 Button(action: cancel) {
-                    Image(systemName: "xmark").font(.headline).frame(width: 44, height: 44)
+                    Image(systemName: "xmark").font(.headline).frame(width: 30, height: 30)
                 }
-                .buttonStyle(.plain)
-                .glassEffect(.regular.interactive(), in: .circle)
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+                .foregroundStyle(.white)
                 .accessibilityLabel("Abbrechen")
                 .padding(.leading, 20).padding(.top, 8)
             }

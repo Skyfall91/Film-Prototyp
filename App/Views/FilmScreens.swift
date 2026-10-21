@@ -94,10 +94,11 @@ struct FilmDetailView: View {
             if let onClose {
                 Button { closing = true; onClose() } label: {
                     Image(systemName: "xmark").font(.body.weight(.semibold))
-                        .frame(width: 44, height: 44)
+                        .frame(width: 30, height: 30)
                 }
-                .buttonStyle(.plain)
-                .glassEffect(.regular.interactive(), in: .circle)
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+                .foregroundStyle(.white)
                 .padding(.trailing, 16).padding(.top, 4)
                 .opacity(contentVisible ? 1 : 0)
                 .accessibilityLabel("Schließen")
@@ -357,10 +358,11 @@ struct FilmDetailView: View {
                     Button { sharePlay = true } label: {
                         Image(systemName: "shareplay")
                             .font(.subheadline.weight(.semibold))
-                            .frame(width: 46, height: 46)
+                            .frame(width: 32, height: 32)
                     }
-                    .buttonStyle(.plain)
-                    .glassEffect(.regular.interactive(), in: .circle)
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .foregroundStyle(.white)
                     .accessibilityLabel("Mit SharePlay schauen")
                 }
             }

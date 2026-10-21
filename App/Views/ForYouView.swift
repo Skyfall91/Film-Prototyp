@@ -224,10 +224,11 @@ struct ForYouView: View {
                 Image(systemName: "arrow.uturn.backward")
                     .font(.headline)
                     .symbolEffect(.rotate.counterClockwise, value: undoBounce)
-                    .frame(width: 42, height: 42)
+                    .frame(width: 28, height: 28)
             }
-            .buttonStyle(.plain)
-            .glassEffect(.regular.interactive(), in: .circle)
+            .buttonStyle(.glass)
+            .buttonBorderShape(.circle)
+            .foregroundStyle(.white)
             // Keep navigation in a fixed place; unavailable undo is disabled, never hidden.
             .disabled(!store.canUndo)
             .accessibilityLabel("Rückgängig")
