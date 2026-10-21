@@ -134,7 +134,7 @@ struct FilmDetailView: View {
     }
 
     /// Das Cover ist die Lichtquelle der Seite: groß in der Mitte, sein eigener Schein fällt in den Raum.
-    /// Darunter die Kritiken wie Lorbeeren auf einem Kinoplakat, dann Titel und Entscheidung.
+    /// Darunter die Kritiken mit den Zeichen ihrer Quellen, dann Titel und Entscheidung.
     private func hero(_ rec: Recommendation) -> some View {
         VStack(spacing: 0) {
             PosterView(film: film, cornerRadius: 14, showsBadge: false)
@@ -237,42 +237,54 @@ struct FilmDetailView: View {
         .accessibilityElement(children: .contain)
     }
 
-    /// Kritiken im Vokabular des Kinoplakats: Lorbeerkranz, Zahl, Quelle. Antippen öffnet die Quelle.
+    /// Kritiken mit dem Zeichen der jeweiligen Quelle: IMDb-Schild, Tomate, Metascore-Feld.
+    /// Antippen öffnet die Quelle.
     private var laurels: some View {
-        HStack(alignment: .top, spacing: 22) {
+        HStack(alignment: .top, spacing: 26) {
             if let imdb = film.imdbRating {
-                laurel(imdb.formatted(.number.precision(.fractionLength(1))), source: "IMDb",
-                       url: "https://www.imdb.com/title/\(film.imdbID)/")
+                let value = imdb.formatted(.number.precision(.fractionLength(1)))
+                score(source: "IMDb", caption: "Zuschauer", spoken: value, url: "https://www.imdb.com/title/\(film.imdbID)/") {
+                    Text("IMDb")
+                        .font(.system(size: 12, weight: .black)).foregroundStyle(.black)
+                        .padding(.horizontal, 5).padding(.vertical, 3)
+                        .background(Color(red: 0.96, green: 0.77, blue: 0.09), in: .rect(cornerRadius: 4))
+                    Text(value)
+                }
             }
             if let rt = film.rottenTomatoes {
-                laurel("\(rt) %", source: "Kritiken",
-                       url: "https://www.rottentomatoes.com/search?search=\(query)")
+                score(source: "Rotten Tomatoes", caption: "Kritiker", spoken: "\(rt) Prozent",
+                      url: "https://www.rottentomatoes.com/search?search=\(query)") {
+                    Text(rt >= 60 ? "🍅" : "🤢").font(.system(size: 18))
+                    Text("\(rt) %")
+                }
             }
             if let mc = film.metascore {
-                laurel("\(mc)", source: "Metacritic", url: "https://www.metacritic.com/search/\(query)/")
+                score(source: "Metacritic", caption: "Metascore", spoken: "\(mc)", url: "https://www.metacritic.com/search/\(query)/") {
+                    Text("\(mc)")
+                        .font(.system(size: 15, weight: .heavy)).foregroundStyle(.white)
+                        .frame(width: 30, height: 26)
+                        .background(mc >= 61 ? Color(red: 0.4, green: 0.8, blue: 0.2) : mc >= 40 ? Color(red: 0.95, green: 0.75, blue: 0.1) : .red,
+                                    in: .rect(cornerRadius: 4))
+                }
             }
         }
     }
 
-    private func laurel(_ value: String, source: String, url: String) -> some View {
+    private func score<Mark: View>(source: String, caption: String, spoken: String, url: String, @ViewBuilder mark: () -> Mark) -> some View {
         Link(destination: URL(string: url)!) {
-            VStack(spacing: 2) {
-                HStack(spacing: 1) {
-                    Image(systemName: "laurel.leading")
-                    Text(value)
-                        .font(.system(size: 19, weight: .semibold, design: .serif))
-                        .monospacedDigit()
-                    Image(systemName: "laurel.trailing")
-                }
-                .font(.system(size: 26, weight: .light))
-                .foregroundStyle(.primary.opacity(0.9))
-                Text(source)
+            VStack(spacing: 4) {
+                HStack(spacing: 6) { mark() }
+                    .font(.system(size: 19, weight: .semibold))
+                    .monospacedDigit()
+                    .frame(height: 28)
+                Text(caption)
                     .font(.caption2.weight(.medium))
                     .foregroundStyle(.secondary)
             }
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(source): \(value)")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(source): \(spoken)")
         .accessibilityHint("Öffnet die Quelle")
     }
 
