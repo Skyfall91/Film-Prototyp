@@ -240,26 +240,27 @@ struct FilmDetailView: View {
     /// Kritiken mit dem Zeichen der jeweiligen Quelle: IMDb-Schild, Tomate, Metascore-Feld.
     /// Antippen öffnet die Quelle.
     private var laurels: some View {
-        HStack(alignment: .top, spacing: 26) {
+        HStack(alignment: .top, spacing: 0) {
             if let imdb = film.imdbRating {
                 let value = imdb.formatted(.number.precision(.fractionLength(1)))
-                score(source: "IMDb", caption: "Zuschauer", spoken: value, url: "https://www.imdb.com/title/\(film.imdbID)/") {
+                score(source: "IMDb", caption: "Zuschauer", value: value, spoken: value,
+                      url: "https://www.imdb.com/title/\(film.imdbID)/") {
                     Text("IMDb")
                         .font(.system(size: 12, weight: .black)).foregroundStyle(.black)
                         .padding(.horizontal, 5).padding(.vertical, 3)
                         .background(Color(red: 0.96, green: 0.77, blue: 0.09), in: .rect(cornerRadius: 4))
-                    Text(value)
                 }
             }
             if let rt = film.rottenTomatoes {
-                score(source: "Rotten Tomatoes", caption: "Kritiker", spoken: "\(rt) Prozent",
+                score(source: "Rotten Tomatoes", caption: "Kritiker", value: "\(rt) %", spoken: "\(rt) Prozent",
                       url: "https://www.rottentomatoes.com/search?search=\(query)") {
                     Text(rt >= 60 ? "🍅" : "🤢").font(.system(size: 18))
-                    Text("\(rt) %")
                 }
             }
             if let mc = film.metascore {
-                score(source: "Metacritic", caption: "Metascore", spoken: "\(mc)", url: "https://www.metacritic.com/search/\(query)/") {
+                // Beim Metascore ist das Feld selbst die Zahl.
+                score(source: "Metacritic", caption: "Metascore", value: nil, spoken: "\(mc)",
+                      url: "https://www.metacritic.com/search/\(query)/") {
                     Text("\(mc)")
                         .font(.system(size: 15, weight: .heavy)).foregroundStyle(.white)
                         .frame(width: 30, height: 26)
@@ -270,17 +271,29 @@ struct FilmDetailView: View {
         }
     }
 
-    private func score<Mark: View>(source: String, caption: String, spoken: String, url: String, @ViewBuilder mark: () -> Mark) -> some View {
+    /// Die Zahl steht mittig über der Beschriftung, das Zeichen der Quelle hängt links daneben.
+    private func score<Mark: View>(source: String, caption: String, value: String?, spoken: String, url: String,
+                                   @ViewBuilder mark: () -> Mark) -> some View {
         Link(destination: URL(string: url)!) {
             VStack(spacing: 4) {
-                HStack(spacing: 6) { mark() }
-                    .font(.system(size: 19, weight: .semibold))
-                    .monospacedDigit()
-                    .frame(height: 28)
+                Group {
+                    if let value {
+                        Text(value)
+                            .overlay(alignment: .leading) {
+                                mark().fixedSize().alignmentGuide(.leading) { $0[.trailing] + 6 }
+                            }
+                    } else {
+                        mark()
+                    }
+                }
+                .font(.system(size: 19, weight: .semibold))
+                .monospacedDigit()
+                .frame(height: 28)
                 Text(caption)
                     .font(.caption2.weight(.medium))
                     .foregroundStyle(.secondary)
             }
+            .frame(width: 124)
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
