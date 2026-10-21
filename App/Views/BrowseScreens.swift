@@ -108,7 +108,7 @@ struct MoodSearchView: View {
             if !r.query.summary.isEmpty {
                 Text("„\(r.query.summary)“").font(.subheadline.italic()).foregroundStyle(.secondary)
             }
-            FlowChips(items: understoodChips(r.query))
+            FlowChips(items: r.people + understoodChips(r.query).filter { !(r.people.isEmpty == false && $0 == "Alles") })
         }
 
         if let top = r.films.first {

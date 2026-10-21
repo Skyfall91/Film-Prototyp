@@ -93,12 +93,14 @@ struct FilmDetailView: View {
         // Apples Schließen-Button, ohne Navigationsleiste: Die würde die Flug-Ebene verschieben.
         .overlay(alignment: .topTrailing) {
             if let onClose {
-                Button(role: .close) { closing = true; onClose() }
-                    .labelStyle(.iconOnly)
-                    .buttonStyle(.glass)
-                    .buttonBorderShape(.circle)
-                    .controlSize(.large)
-                    .tint(.white)
+                // Gleiche Größe wie Rückgängig und Filter: 44 pt Glaskreis.
+                Button(role: .close) { closing = true; onClose() } label: {
+                    Image(systemName: "xmark").font(.body.weight(.semibold)).frame(width: 30, height: 30)
+                }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+                .foregroundStyle(.white)
+                .accessibilityLabel("Schließen")
                     .padding(.trailing, 16).padding(.top, 4)
                     .opacity(contentVisible ? 1 : 0)
             }

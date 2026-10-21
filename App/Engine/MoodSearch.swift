@@ -52,6 +52,8 @@ struct MoodResult {
     var query: MoodQuery
     var films: [Recommendation]
     var usedAppleIntelligence: Bool
+    /// Erkannte Personen aus Besetzung und Regie.
+    var people: [String] = []
 }
 
 enum MoodSearch {
@@ -87,6 +89,7 @@ enum MoodSearch {
         let rest = named.isEmpty ? text : removing(named, from: text)
         var result = await interpret(rest, profiles: profiles)
         if !named.isEmpty {
+            result.people = named
             if result.query.summary.isEmpty || !rest.contains(where: \.isLetter) {
                 result.query.summary = "Mit " + named.joined(separator: " und ")
             }
@@ -141,20 +144,29 @@ enum MoodSearch {
         name.split(separator: " ").last.map { normalized(String($0)) }.flatMap { $0.count >= 4 ? $0 : nil }
     }
 
+    /// Alle Namensteile mit mindestens vier Buchstaben: „leonardo“ findet genauso wie „dicaprio“.
+    private static func nameParts(_ name: String) -> [String] {
+        name.split(separator: " ").map { normalized(String($0)) }.filter { $0.count >= 4 }
+    }
+
     /// Namen im Suchtext: der ganze Name oder ein Nachname mit mindestens vier Buchstaben („dicaprio“).
     static func people(in text: String) -> [String] {
         let t = normalized(text)
         let full = allPeople.filter { t.contains(normalized($0)) }
         if !full.isEmpty { return full.sorted() }
         let words = Set(t.split { !$0.isLetter && $0 != "-" && $0 != "'" }.map(String.init))
-        return allPeople.filter { lastName($0).map(words.contains) ?? false }.sorted()
+        let byLast = allPeople.filter { lastName($0).map(words.contains) ?? false }
+        if !byLast.isEmpty { return byLast.sorted() }
+        // Nur ein Vorname, wenn er zu höchstens drei Personen passt. Sonst wäre es eher ein normales Wort.
+        let byFirst = allPeople.filter { !Set(nameParts($0)).isDisjoint(with: words) }
+        return byFirst.count <= 3 ? byFirst.sorted() : []
     }
 
     private static func removing(_ names: [String], from text: String) -> String {
         var rest = normalized(text)
         for name in names {
             rest = rest.replacingOccurrences(of: normalized(name), with: " ")
-            if let last = lastName(name) { rest = rest.replacingOccurrences(of: last, with: " ") }
+            for part in nameParts(name) { rest = rest.replacingOccurrences(of: part, with: " ") }
         }
         for filler in ["filme mit", "film mit", "serien mit", "mit", "von", "und"] {
             rest = rest.replacingOccurrences(of: "\\b\(filler)\\b", with: " ", options: .regularExpression)

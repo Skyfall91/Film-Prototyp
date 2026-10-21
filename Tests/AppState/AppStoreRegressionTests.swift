@@ -27,6 +27,8 @@ final class AppStoreRegressionTests: XCTestCase {
             XCTAssertTrue(result.films.allSatisfy { $0.film.cast.contains("Leonardo DiCaprio") }, text)
         }
         XCTAssertEqual(MoodSearch.people(in: "etwas Lustiges"), [])
+        XCTAssertEqual(MoodSearch.people(in: "leonardo"), ["Leonardo DiCaprio"])
+        XCTAssertEqual(MoodSearch.people(in: "Brad Pitt"), ["Brad Pitt"])
     }
     @MainActor func testOwnSyncConfirmationKeepsUndoAndDeck() throws {
         let store=AppStore(ephemeral:true)
