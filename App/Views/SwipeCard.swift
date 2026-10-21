@@ -22,6 +22,8 @@ struct SwipeDeck<Item: Identifiable, Card: View>: View {
     @Binding var trigger: SwipeDirection?
     let onCommit: (Item, SwipeDirection) -> Void
     var onTap: (Item) -> Void = { _ in }
+    /// Karte, die per „Rückgängig“ zurückkommt: Sie fliegt von dort herein, wohin sie gewischt wurde.
+    var returning: (id: Item.ID, from: SwipeDirection)? = nil
     @ViewBuilder let card: (Item, _ isTop: Bool) -> Card
 
     @State private var progress: CGFloat = 0
@@ -77,9 +79,22 @@ struct SwipeDeck<Item: Identifiable, Card: View>: View {
                 .zIndex(index == -1 ? 100 : Double(10 - index))
                 .allowsHitTesting(index == 0)
                 // Wird eine hintere Karte ausgetauscht, blendet sie weich aus statt zu verschwinden.
-                .transition(.asymmetric(insertion: .opacity.combined(with: .scale(scale: 0.9)), removal: .opacity))
+                .transition(transition(for: item.id))
             }
         }
+    }
+
+    private func transition(for id: Item.ID) -> AnyTransition {
+        guard let returning, returning.id == id else {
+            return .asymmetric(insertion: .opacity.combined(with: .scale(scale: 0.9)), removal: .opacity)
+        }
+        let away: CGSize = switch returning.from {
+        case .left: CGSize(width: -760, height: 0)
+        case .right: CGSize(width: 760, height: 0)
+        case .up: CGSize(width: 0, height: -760)
+        case .down: CGSize(width: 0, height: 760)
+        }
+        return .asymmetric(insertion: .offset(away), removal: .opacity)
     }
 
     /// Weich federnd: Die neue Karte setzt sich mit einem kleinen Nachschwingen, ohne zu hüpfen.

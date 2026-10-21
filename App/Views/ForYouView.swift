@@ -19,6 +19,9 @@ struct ForYouView: View {
     /// Nachlernen plötzlich ausgetauscht.
     @State private var queue: [Recommendation] = []
     @State private var swiped: [Recommendation] = []
+    /// Wohin jede Karte gewischt wurde, damit sie bei „Rückgängig“ von dort zurückfliegt.
+    @State private var swipeDirections: [Recommendation.ID: SwipeDirection] = [:]
+    @State private var returning: (id: Recommendation.ID, from: SwipeDirection)?
     /// Geschmack hat sich geändert, während „Für dich“ nicht zu sehen war: beim Zurückkommen neu sortieren.
     @State private var visible = false
     @State private var stale = false
@@ -196,14 +199,25 @@ struct ForYouView: View {
             Spacer()
 
             Button {
-                runPendingWork()
-                ownChange = true
-                withAnimation(.snappy) { store.undo() }
                 if let last = swiped.popLast() {
-                    withAnimation(.smooth(duration: 0.35)) {
+                    // Erst die Karte zurückfliegen lassen. Lernen, Speichern und Sync folgen im nächsten Moment,
+                    // sonst kosten sie das erste Bild der Animation.
+                    returning = (last.id, swipeDirections[last.id] ?? .left)
+                    withAnimation(.spring(response: 0.55, dampingFraction: 0.82)) {
                         queue.removeAll { $0.id == last.id }
                         queue.insert(last, at: 0)
                     }
+                    Task { @MainActor in
+                        runPendingWork()
+                        ownChange = true
+                        store.undo()
+                        try? await Task.sleep(for: .milliseconds(700))
+                        if returning?.id == last.id { returning = nil }
+                    }
+                } else {
+                    runPendingWork()
+                    ownChange = true
+                    withAnimation(.snappy) { store.undo() }
                 }
                 undoBounce += 1
             } label: {
@@ -253,7 +267,8 @@ struct ForYouView: View {
             let width = min(geo.size.width, (geo.size.height - RecommendationCard.infoHeight) * 2 / 3)
             SwipeDeck(items: recs, options: options, trigger: $trigger,
                       onCommit: { rec, direction in handle(direction, rec.film) },
-                      onTap: { hero.show($0.film, from: "foryou") }) { rec, isTop in
+                      onTap: { hero.show($0.film, from: "foryou") },
+                      returning: returning) { rec, isTop in
                 RecommendationCard(rec: rec, compact: !isTop, width: width, viewers: store.activeProfileIDs.count,
                                    heroScope: "foryou")
                     // Form explizit setzen, sonst zeigt die Quelle vor der ersten Zoom-Animation
@@ -336,7 +351,7 @@ struct ForYouView: View {
 
     private func handle(_ direction: SwipeDirection, _ film: Film) {
         let rec = direction == .up ? nil : queue.first(where: { $0.film.id == film.id })
-        defer { if let rec { advance(past: rec) } }
+        defer { if let rec { swipeDirections[rec.id] = direction; advance(past: rec) } }
         if rec != nil { store.homeSwipeCount += 1 }
         switch direction {
         case .up:
