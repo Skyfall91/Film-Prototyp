@@ -77,6 +77,7 @@ struct FilmDetailView: View {
             .padding(.bottom, 30)
         }
         .scrollIndicators(.hidden)
+        .ignoresSafeArea(edges: .top)
         // Nach unten ziehen schließt, wie bei einem Sheet.
         .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y + $0.contentInsets.top } action: { _, y in
             guard let onClose, !closing, y < -90 else { return }
@@ -137,61 +138,88 @@ struct FilmDetailView: View {
 
     /// Das Cover ist die Lichtquelle der Seite: groß in der Mitte, sein eigener Schein fällt in den Raum.
     /// Darunter die Kritiken mit den Zeichen ihrer Quellen, dann Titel und Entscheidung.
-    /// Oben groß das Cover, darunter linksbündig und dicht: Titel, eine Zeile Fakten, Kritiken,
-    /// warum es passt, dann die Aktionen. Wie in der TV-App, nicht wie ein zentriertes Plakat.
+    /// Das Cover ist die Bühne: randlos über die ganze Breite, bis unter die Statusleiste.
+    /// Unten läuft es ins Dunkle aus, Titel und Fakten liegen darauf wie auf einem Kinoplakat.
+    /// Darunter nur noch, was zur Entscheidung führt: Kritiken, warum es passt, Abspielen.
     private func hero(_ rec: Recommendation) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            PosterView(film: film, cornerRadius: 16, showsBadge: false)
+            PosterView(film: film, cornerRadius: 0, showsBadge: false)
                 .matchedTransitionSource(id: film.id, in: playerNS)
-                .containerRelativeFrame(.horizontal) { w, _ in min(w * 0.8, 420) }
-                .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.white.opacity(0.12), lineWidth: 0.5))
-                .shadow(color: .black.opacity(0.5), radius: 22, y: 12)
+                .containerRelativeFrame(.horizontal)
                 .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { onPosterFrame?($0) }
                 .opacity(posterHidden ? 0 : 1)
-                .frame(maxWidth: .infinity)
-                .padding(.top, onClose == nil ? 24 : 60)
+                // Der Verlauf gehört zur Seite, nicht zum Cover: Er blendet mit dem Inhalt ein,
+                // das fliegende Cover landet ohne Sprung.
+                .overlay {
+                    VStack(spacing: 0) {
+                        LinearGradient(colors: [.black.opacity(0.55), .clear], startPoint: .top, endPoint: .bottom)
+                            .frame(height: 120)
+                        Spacer()
+                        LinearGradient(stops: [.init(color: .clear, location: 0),
+                                               .init(color: .black.opacity(0.7), location: 0.45),
+                                               .init(color: .black, location: 1)],
+                                       startPoint: .top, endPoint: .bottom)
+                            .frame(height: 300)
+                    }
+                    .allowsHitTesting(false)
+                }
+                .overlay(alignment: .bottomLeading) { titleBlock.padding(.horizontal, 20).padding(.bottom, 18) }
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text(film.title)
-                    .font(Self.titleFont)
-                    .lineLimit(3).minimumScaleFactor(0.75)
-                    .fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: 6) {
-                    Image(systemName: film.isSeries ? "tv" : "film")
-                    Text(film.yearText)
-                    Text("·")
-                    Text(film.isSeries ? film.seasonsText : film.runtimeText)
-                    FSKBadge(fsk: film.fsk)
+            VStack(alignment: .leading, spacing: 0) {
+                laurels
+
+                if !film.comingSoon {
+                    HStack(spacing: 10) {
+                        MatchRing(match: shownMatch, target: rec.match, size: 30)
+                        Text(rec.reason)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                    .padding(.top, 14)
                 }
-                .font(.subheadline).foregroundStyle(.secondary)
-                if film.comingSoon {
-                    Text(film.releaseNote ?? "Demnächst")
-                        .font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
-                }
-                if film.originalTitle != film.title, !film.title.hasPrefix(film.originalTitle) {
-                    Text(film.originalTitle).font(.footnote).foregroundStyle(.tertiary)
-                }
+
+                actions
+                    .padding(.top, 20)
             }
-            .padding(.top, 22)
-
-            laurels
-                .padding(.top, 14)
-
-            if !film.comingSoon {
-                HStack(spacing: 10) {
-                    MatchRing(match: shownMatch, target: rec.match, size: 30)
-                    Text(rec.reason)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-                .padding(.top, 14)
+            .padding(.horizontal, 20)
+            .padding(.top, 4)
+            // Das Schwarz unter dem Cover läuft weich in den Hintergrund der Seite aus, ohne Kante.
+            .background(alignment: .top) {
+                LinearGradient(colors: [.black, .black.opacity(0)], startPoint: .top, endPoint: .bottom)
+                    .frame(height: 220)
+                    .allowsHitTesting(false)
             }
-
-            actions
-                .padding(.top, 18)
         }
-        .padding(.horizontal, 20)
+    }
+
+    private var titleBlock: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(film.title)
+                .font(Self.titleFont)
+                .foregroundStyle(.white)
+                .lineLimit(3).minimumScaleFactor(0.75)
+                .fixedSize(horizontal: false, vertical: true)
+                .shadow(color: .black.opacity(0.5), radius: 10, y: 2)
+            HStack(spacing: 6) {
+                Text(film.isSeries ? "Serie" : "Film")
+                Text("·")
+                Text(film.yearText)
+                Text("·")
+                Text(film.isSeries ? film.seasonsText : film.runtimeText)
+                FSKBadge(fsk: film.fsk)
+            }
+            .font(.subheadline)
+            .foregroundStyle(.white.opacity(0.8))
+            if film.comingSoon {
+                Text(film.releaseNote ?? "Demnächst")
+                    .font(.subheadline.weight(.semibold)).foregroundStyle(.white.opacity(0.8))
+            }
+            if film.originalTitle != film.title, !film.title.hasPrefix(film.originalTitle) {
+                Text(film.originalTitle).font(.footnote).foregroundStyle(.white.opacity(0.55))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// Die Redaktion wie auf einem Kinoplakat zur Award-Saison: das Cover als Bühne,

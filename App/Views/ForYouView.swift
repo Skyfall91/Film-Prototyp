@@ -779,7 +779,9 @@ struct HeroOverlay: View {
         let source = hero.source
         ZStack {
             if let film = hero.film {
-                FilmDetailView(film: film, posterHidden: hero.ghost != nil,
+                // Beim Öffnen liegt das echte Cover schon darunter, das fliegende blendet am Ziel aus.
+                // So erscheinen Verlauf und Titel auf dem Cover mit, statt am Ende aufzuspringen.
+                FilmDetailView(film: film, posterHidden: hero.ghost != nil && !hero.open,
                                contentVisible: hero.open,
                                onClose: hero.close, onPosterFrame: { hero.detailFrame = $0 })
             }
@@ -791,35 +793,35 @@ struct HeroOverlay: View {
                     let r = hero.open ? hero.detailFrame : source.frame
                     // Schatten wie am jeweiligen Ort: Karte groß und weich, Detail-Cover etwas enger,
                     // kleine Listen-Cover ohne. Er wandert stufenlos mit.
-                    RoundedRectangle(cornerRadius: hero.open ? 14 : source.radius)
+                    RoundedRectangle(cornerRadius: hero.open ? 0 : source.radius)
                         .fill(.black)
                         .frame(width: r.width, height: r.height)
-                        .shadow(color: .black.opacity(hero.open || source.card ? 0.5 : 0),
-                                radius: hero.open ? 18 : 24, y: hero.open ? 10 : 12)
+                        .shadow(color: .black.opacity(!hero.open && source.card ? 0.5 : 0), radius: 24, y: 12)
                         .position(x: r.midX - origin.x, y: r.midY - origin.y)
                     if let rec = source.rec {
                         // Die ganze Karte fliegt: in Kartengröße gezeichnet und auf die aktuelle Größe skaliert,
                         // so sitzen Verlauf und Text genau wie auf der Karte. Die Ecken enden bei 14 pt am Ziel.
                         let s = source.frame.size
                         let scale = r.width / max(s.width, 1)
-                        let detailScale = max(hero.detailFrame.width / max(s.width, 1), 0.01)
                         RecommendationCard(rec: rec, width: s.width, viewers: store.activeProfileIDs.count,
                                            ghostOpen: hero.open,
-                                           cornerRadius: hero.open ? 14 / detailScale : source.radius)
+                                           cornerRadius: hero.open ? 0 : source.radius)
                             .frame(width: s.width, height: s.height)
                             .scaleEffect(scale)
                             .position(x: r.midX - origin.x, y: r.midY - origin.y)
                     } else {
                         PosterView(film: film, cornerRadius: 0, showsBadge: false)
                             .frame(width: r.width, height: r.height)
-                            .clipShape(.rect(cornerRadius: hero.open ? 14 : source.radius))
-                            .overlay(RoundedRectangle(cornerRadius: hero.open ? 14 : source.radius)
-                                .strokeBorder(.white.opacity(hero.open ? 0.12 : 0), lineWidth: 0.5))
+                            .clipShape(.rect(cornerRadius: hero.open ? 0 : source.radius))
+                            .overlay(RoundedRectangle(cornerRadius: hero.open ? 0 : source.radius)
+                                .strokeBorder(.white.opacity(0), lineWidth: 0.5))
                             .position(x: r.midX - origin.x, y: r.midY - origin.y)
                     }
                 }
             }
             .ignoresSafeArea()
+            // Nur die Deckkraft bekommt die verzögerte Blende, der Flug selbst bleibt die Feder.
+            .animation(hero.open ? .easeOut(duration: 0.25).delay(0.3) : nil) { $0.opacity(hero.open ? 0 : 1) }
             .allowsHitTesting(false)
         }
     }
