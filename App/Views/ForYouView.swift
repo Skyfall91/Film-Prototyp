@@ -467,7 +467,8 @@ struct RecommendationCard: View {
                     // als Platzhalter und deckt die nächste Karte ab, bis die Detailseite darüber liegt.
                     RoundedRectangle(cornerRadius: 28).fill(.black)
                         .shadow(color: .black.opacity(lifted ? 0 : 0.5), radius: 24, y: 12)
-                        .opacity(detailsUp ? 0 : 1)
+                        // Erst weg, wenn die Detailseite ganz steht. Sonst scheint im Flug die nächste Karte durch.
+                        .opacity(detailsUp && hero.ghost == nil ? 0 : 1)
                 }
             }
             .task(id: "\(rec.id)-\(rec.match)-\(viewers)") {
@@ -503,11 +504,6 @@ struct RecommendationCard: View {
                 .font(RecommendationCard.titleFont)
                 .lineLimit(2).minimumScaleFactor(0.6)
                 .shadow(color: .black.opacity(0.5), radius: 8, y: 2)
-                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
-                    if let heroScope { hero.titleFrames[HeroCoordinator.key(rec.film.id, heroScope)] = frame }
-                }
-                // Der Titel fliegt als eigene Ebene und wechselt dabei die Schrift.
-                .opacity(ghostOpen == nil ? 1 : 0)
 
             RedactedText(rec.film.hook)
                 .font(.callout)
@@ -629,9 +625,7 @@ final class HeroCoordinator {
     private(set) var ghost: Film?
     /// Ändern sich bei jedem Scrollen; nur der Flug selbst liest sie, darum ohne Beobachtung.
     @ObservationIgnored var sources: [String: Source] = [:]
-    @ObservationIgnored var titleFrames: [String: CGRect] = [:]
     var detailFrame: CGRect = .zero
-    var detailTitleFrame: CGRect = .zero
     @ObservationIgnored private var transitionTask: Task<Void, Never>?
     /// Während des Rückflugs angetippt: danach direkt öffnen statt den Tipp zu verlieren.
     @ObservationIgnored private var closingNow = false
@@ -645,7 +639,6 @@ final class HeroCoordinator {
     func isShowingDetails(_ id: String, in scope: String) -> Bool { isLifted(id, in: scope) && open }
 
     var source: Source? { film.flatMap { f in scope.flatMap { sources[Self.key(f.id, $0)] } } }
-    var titleSource: CGRect? { film.flatMap { f in scope.flatMap { titleFrames[Self.key(f.id, $0)] } } }
 
     func show(_ film: Film, from scope: String) {
         if self.film != nil {
@@ -757,14 +750,11 @@ struct HeroOverlay: View {
 
     var body: some View {
         let source = hero.source
-        let titleSource = source?.card == true ? hero.titleSource : nil
         ZStack {
             if let film = hero.film {
                 FilmDetailView(film: film, posterHidden: hero.ghost != nil,
-                               titleHidden: hero.ghost != nil && titleSource != nil,
                                contentVisible: hero.open,
-                               onClose: hero.close, onPosterFrame: { hero.detailFrame = $0 },
-                               onTitleFrame: { hero.detailTitleFrame = $0 })
+                               onClose: hero.close, onPosterFrame: { hero.detailFrame = $0 })
             }
             // Ganzer Bildschirm ohne Ränder: Hier entsprechen die Koordinaten denen der Messung.
             GeometryReader { _ in
@@ -797,28 +787,6 @@ struct HeroOverlay: View {
                             .overlay(RoundedRectangle(cornerRadius: hero.open ? 14 : source.radius)
                                 .strokeBorder(.white.opacity(hero.open ? 0.12 : 0), lineWidth: 0.5))
                             .position(x: r.midX, y: r.midY)
-                    }
-                    // Der Titel fliegt mit und wechselt dabei die Schrift: Karte ↔ Detailseite.
-                    if let cardTitle = titleSource {
-                        let t = hero.open ? hero.detailTitleFrame : cardTitle
-                        ZStack {
-                            Text(film.title)
-                                .font(RecommendationCard.titleFont)
-                                .lineLimit(2).minimumScaleFactor(0.6)
-                                .shadow(color: .black.opacity(0.5), radius: 8, y: 2)
-                                .frame(width: cardTitle.width)
-                                .opacity(hero.open ? 0 : 1)
-                            Text(film.title)
-                                .font(FilmDetailView.titleFont)
-                                .multilineTextAlignment(.center)
-                                .lineLimit(3).minimumScaleFactor(0.75)
-                                .frame(width: hero.detailTitleFrame.width)
-                                .opacity(hero.open ? 1 : 0)
-                        }
-                        .foregroundStyle(.white)
-                        // Beide Schriften auf derselben Mitte, so verschmelzen sie statt doppelt zu stehen.
-                        .frame(width: t.width, height: t.height)
-                        .position(x: t.midX, y: t.midY)
                     }
                 }
             }

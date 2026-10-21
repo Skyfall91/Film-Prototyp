@@ -16,11 +16,9 @@ struct FilmDetailView: View {
     /// bleibt das echte Cover hier unsichtbar und liefert nur die Zielposition.
     var posterHidden = false
     /// Nur wenn der Titel von einer Karte mitfliegt.
-    var titleHidden = false
     var contentVisible = true
     var onClose: (() -> Void)? = nil
     var onPosterFrame: ((CGRect) -> Void)? = nil
-    var onTitleFrame: ((CGRect) -> Void)? = nil
     static let titleFont = Theme.filmTitle(size: 34)
     @State private var closing = false
     /// Vom linken Rand wischen: Die Seite schrumpft unter dem Finger und fliegt dann zurück.
@@ -164,8 +162,6 @@ struct FilmDetailView: View {
                     .multilineTextAlignment(.center)
                     .lineLimit(3).minimumScaleFactor(0.75)
                     .fixedSize(horizontal: false, vertical: true)
-                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { onTitleFrame?($0) }
-                    .opacity(titleHidden ? 0 : 1)
                 HStack(spacing: 7) {
                     Text(film.yearText)
                     Text("·")
